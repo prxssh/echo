@@ -21,7 +21,7 @@ type Piece [20]byte
 type Info struct {
 	Name     string  // Filename (single-file) or directory name (mult-file)
 	Length   int64   // File length (single-file) or zero for multi-file
-	Files    []File  // List of files (multi-file) or nil for single-file
+	Files    []*File // List of files (multi-file) or nil for single-file
 	PieceLen int64   // Number of bytes in each piece
 	Pieces   []Piece // Concatenated 20-byte SHA1 hashes
 	Private  bool    // Whether the torrent is private
@@ -53,16 +53,35 @@ func Decode(r io.Reader) (*Metainfo, error) {
 }
 
 func readMetainfoIntoStruct(meta map[string]any) (*Metainfo, error) {
-	announceURL, err := parseString(meta, "announce")
+	announceURL, err := parseString(meta, "announce", true)
 	if err != nil {
 		return nil, err
 	}
 
-	announceList, _ := meta["announce-list"].([][]string)
-	creationDate, _ := parseInt(meta, "creation date")
-	createdBy, _ := parseString(meta, "created by")
-	encoding, _ := parseString(meta, "encoding")
-	comment, _ := parseString(meta, "comment")
+	announceList, err := parseAnnounceList(meta)
+	if err != nil {
+		return nil, err
+	}
+
+	creationDate, err := parseInt(meta, "creation date", false)
+	if err != nil {
+		return nil, err
+	}
+
+	createdBy, err := parseString(meta, "created by", false)
+	if err != nil {
+		return nil, err
+	}
+
+	encoding, err := parseString(meta, "encoding", false)
+	if err != nil {
+		return nil, err
+	}
+
+	comment, err := parseString(meta, "comment", false)
+	if err != nil {
+		return nil, err
+	}
 
 	infoRaw, ok := meta["info"].(map[string]any)
 	if !ok {
@@ -86,17 +105,17 @@ func readMetainfoIntoStruct(meta map[string]any) (*Metainfo, error) {
 }
 
 func parseInfoDict(d map[string]any) (*Info, error) {
-	pieceLen, err := parseInt(d, "piece length")
+	pieceLen, err := parseInt(d, "piece length", true)
 	if err != nil {
 		return nil, err
 	}
 
-	name, err := parseString(d, "name")
+	name, err := parseString(d, "name", true)
 	if err != nil {
 		return nil, err
 	}
 
-	pstr, err := parseString(d, "pieces")
+	pstr, err := parseString(d, "pieces", true)
 	if err != nil {
 		return nil, err
 	}
@@ -116,8 +135,15 @@ func parseInfoDict(d map[string]any) (*Info, error) {
 		pieces = append(pieces, p)
 	}
 
-	length, _ := parseInt(d, "length")
-	files, _ := parseFiles(d)
+	length, err := parseInt(d, "length", false)
+	if err != nil {
+		return nil, err
+	}
+
+	files, err := parseFiles(d)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Info{
 		Name:     name,
@@ -128,38 +154,82 @@ func parseInfoDict(d map[string]any) (*Info, error) {
 	}, nil
 }
 
-func parseString(m map[string]any, key string) (string, error) {
+func parseAnnounceList(meta map[string]any) ([][]string, error) {
+	raw, ok := meta["announce-list"]
+	if !ok {
+		return nil, nil // optional
+	}
+
+	announceListRaw, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("announce-list is not a list")
+	}
+	var out [][]string
+	for _, group := range announceListRaw {
+		inner, ok := group.([]any)
+		if !ok {
+			return nil, fmt.Errorf("announce-list group is not a list")
+		}
+
+		var urls []string
+		for _, u := range inner {
+			s, ok := u.(string)
+			if !ok {
+				return nil, fmt.Errorf("announce-list URL is not a string")
+			}
+			urls = append(urls, s)
+		}
+
+		out = append(out, urls)
+	}
+
+	return out, nil
+}
+
+func parseString(m map[string]any, key string, required bool) (string, error) {
 	raw, ok := m[key]
 	if !ok {
-		return "", fmt.Errorf("missing required key %q", key)
+		if required {
+			return "", fmt.Errorf("missing required key %q", key)
+		}
+		return "", nil
 	}
 
 	s, ok := raw.(string)
 	if !ok {
-		return "", fmt.Errorf("key %q is not a string", key)
+		if required {
+			return "", fmt.Errorf("key %q is not a string", key)
+		}
+		return "", nil
 	}
 
 	return s, nil
 }
 
-func parseInt(m map[string]any, key string) (int64, error) {
+func parseInt(m map[string]any, key string, required bool) (int64, error) {
 	raw, ok := m[key]
 	if !ok {
-		return 0, fmt.Errorf("missing required key %q", key)
+		if required {
+			return 0, fmt.Errorf("missing required key %q", key)
+		}
+		return 0, nil
 	}
 
 	s, ok := raw.(int64)
 	if !ok {
-		return 0, fmt.Errorf("key %q is not a string", key)
+		if required {
+			return 0, fmt.Errorf("key %q is not a string", key)
+		}
+		return 0, nil
 	}
 
 	return s, nil
 }
 
-func parseFiles(m map[string]any) ([]File, error) {
+func parseFiles(m map[string]any) ([]*File, error) {
 	rawFiles, ok := m["files"]
 	if !ok {
-		return nil, fmt.Errorf("'files' is not present")
+		return nil, nil // optional
 	}
 
 	list, ok := rawFiles.([]any)
@@ -167,14 +237,19 @@ func parseFiles(m map[string]any) ([]File, error) {
 		return nil, fmt.Errorf("'files' is not a list")
 	}
 
-	var files []File
+	var files []*File
 	for _, entry := range list {
 		m, ok := entry.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("file entry is not a dict")
 		}
 
-		length, err := parseInt(m, "length")
+		length, err := parseInt(m, "length", true)
+		if err != nil {
+			return nil, err
+		}
+
+		md5sum, err := parseString(m, "md5sum", false)
 		if err != nil {
 			return nil, err
 		}
@@ -191,7 +266,11 @@ func parseFiles(m map[string]any) ([]File, error) {
 			}
 			path[i] = s
 		}
-		files = append(files, File{Length: length, Path: path})
+
+		files = append(
+			files,
+			&File{Length: length, Path: path, MD5Hash: md5sum},
+		)
 	}
 
 	return files, nil

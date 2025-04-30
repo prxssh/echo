@@ -37,6 +37,7 @@ func main() {
 		slog.String("announce", meta.Announce),
 		slog.Any("announceList", meta.AnnounceList),
 		slog.Any("files", meta.Info.Files),
+		slog.Any("length", meta.Info.Length),
 	)
 }
 
