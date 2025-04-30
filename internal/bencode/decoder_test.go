@@ -18,10 +18,26 @@ func TestDecode(t *testing.T) {
 		{name: "integer negative", input: "i-7e", want: int64(-7)},
 		{name: "string", input: "4:spam", want: "spam"},
 		{name: "empty string error", input: "0:", want: ""},
-		{name: "list of ints", input: "li1ei2ei3ee", want: []any{int64(1), int64(2), int64(3)}},
-		{name: "nested list", input: "lli1ei2ee3:abce", want: []any{[]any{int64(1), int64(2)}, "abc"}},
-		{name: "dict simple", input: "d3:foo3:bare", want: map[string]any{"foo": "bar"}},
-		{name: "dict nested", input: "d4:listli1ei2eee", want: map[string]any{"list": []any{int64(1), int64(2)}}},
+		{
+			name:  "list of ints",
+			input: "li1ei2ei3ee",
+			want:  []any{int64(1), int64(2), int64(3)},
+		},
+		{
+			name:  "nested list",
+			input: "lli1ei2ee3:abce",
+			want:  []any{[]any{int64(1), int64(2)}, "abc"},
+		},
+		{
+			name:  "dict simple",
+			input: "d3:foo3:bare",
+			want:  map[string]any{"foo": "bar"},
+		},
+		{
+			name:  "dict nested",
+			input: "d4:listli1ei2eee",
+			want:  map[string]any{"list": []any{int64(1), int64(2)}},
+		},
 		{name: "invalid prefix", input: "xe", wantErr: true},
 	}
 

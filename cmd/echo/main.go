@@ -2,12 +2,16 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/prxssh/echo/internal/torrent"
+	"github.com/prxssh/echo/pkg/log"
 )
 
 func main() {
+	setupLogger()
+
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <path-to-torrent-file>\n", os.Args[0])
 		os.Exit(1)
@@ -26,6 +30,22 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to decode torrent: %v\n", err)
 		os.Exit(1)
 	}
+	slog.Info(
+		"Parsed torrent file",
+		slog.String("path", path),
+		slog.String("name", meta.Info.Name),
+		slog.String("announce", meta.Announce),
+		slog.Any("announceList", meta.AnnounceList),
+		slog.Any("files", meta.Info.Files),
+	)
+}
 
-	fmt.Printf("announce: %s\n announceList: %v\n name: %s\n files: %v\n", meta.Announce, meta.AnnounceList, meta.Info.Name, meta.Info.Files)
+func setupLogger() {
+	prettyHandler := log.NewHandler(&slog.HandlerOptions{
+		Level:       slog.LevelInfo,
+		AddSource:   false,
+		ReplaceAttr: nil,
+	})
+	logger := slog.New(prettyHandler)
+	slog.SetDefault(logger)
 }

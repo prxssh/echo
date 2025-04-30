@@ -18,13 +18,38 @@ func TestEncode(t *testing.T) {
 		{"int negative", int64(-5), "i-5e", false},
 		{"string", "spam", "4:spam", false},
 		{"empty string", "", "0:", false},
-		{"list ints", []any{int64(1), int64(2), int64(-3)}, "li1ei2ei-3ee", false},
+		{
+			"list ints",
+			[]any{int64(1), int64(2), int64(-3)},
+			"li1ei2ei-3ee",
+			false,
+		},
 		{"list mixed", []any{"foo", int64(1)}, "l3:fooi1ee", false},
-		{"nested list", []any{[]any{int64(1), int64(2)}, "abc"}, "lli1ei2ee3:abce", false},
+		{
+			"nested list",
+			[]any{[]any{int64(1), int64(2)}, "abc"},
+			"lli1ei2ee3:abce",
+			false,
+		},
 		{"dict simple", map[string]any{"foo": "bar"}, "d3:foo3:bare", false},
-		{"dict key order", map[string]any{"b": "B", "a": "A"}, "d1:a1:A1:b1:Be", false},
-		{"nested dict", map[string]any{"list": []any{int64(1), int64(2)}}, "d4:listli1ei2eee", false},
-		{"dict mixed", map[string]any{"int": int64(1), "str": "x"}, "d3:inti1e3:str1:xe", false},
+		{
+			"dict key order",
+			map[string]any{"b": "B", "a": "A"},
+			"d1:a1:A1:b1:Be",
+			false,
+		},
+		{
+			"nested dict",
+			map[string]any{"list": []any{int64(1), int64(2)}},
+			"d4:listli1ei2eee",
+			false,
+		},
+		{
+			"dict mixed",
+			map[string]any{"int": int64(1), "str": "x"},
+			"d3:inti1e3:str1:xe",
+			false,
+		},
 		{"unsupported", 3.14, "", true},
 	}
 

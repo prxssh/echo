@@ -103,7 +103,10 @@ func parseInfoDict(d map[string]any) (*Info, error) {
 	pbytes := []byte(pstr)
 	plen := len(pbytes)
 	if plen%20 != 0 {
-		return nil, fmt.Errorf("torrent decode: invalid pieces length %d; must be multiple of 20", plen)
+		return nil, fmt.Errorf(
+			"torrent decode: invalid pieces length %d; must be multiple of 20",
+			plen,
+		)
 	}
 	var pieces []Piece
 	for i := 0; i < plen; i += 20 {
