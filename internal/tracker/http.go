@@ -54,7 +54,10 @@ func (t *HTTPTrackerClient) Announce(
 	return parseTrackerResponse(resp.Body)
 }
 
-func buildTrackerRequestParams(announceURL string, params *AnnounceParams) (*url.URL, error) {
+func buildTrackerRequestParams(
+	announceURL string,
+	params *AnnounceParams,
+) (*url.URL, error) {
 	u, err := url.Parse(announceURL)
 	if err != nil {
 		return nil, err

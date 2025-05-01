@@ -16,7 +16,7 @@ clean:
 	rm -rf build
 
 format: 
-	golines -m 80 -t 4 -w .
+	golines -m 90 -t 4 -w .
 	gofmt -w .
 
 test: 
