@@ -39,10 +39,12 @@ type AnnounceParams struct {
 
 // AnnounceResponse is what tracker returns on announce
 type AnnounceResponse struct {
-	Interval uint32 // seconds until next announce
-	Leechers uint32
-	Seeders  uint32
-	Peers    []*Peer // list of peers to connect to
+	TrackerID   string
+	Interval    uint32 // seconds until next announce
+	Leechers    uint32
+	Seeders     uint32
+	Peers       []*Peer
+	MinInterval uint32
 }
 
 // Peer is one peer endpoint from the tracker
