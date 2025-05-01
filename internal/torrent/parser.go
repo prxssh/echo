@@ -1,10 +1,13 @@
 package torrent
 
 import (
+	"bytes"
+	"crypto/sha1"
 	"fmt"
 	"io"
 
 	"github.com/prxssh/echo/internal/bencode"
+	utils "github.com/prxssh/echo/pkg"
 )
 
 // File represents a file in a multi-file torrent
@@ -36,6 +39,7 @@ type Metainfo struct {
 	CreatedBy    string     // Optional creator identifier
 	Encoding     string     // Optional text encoding
 	Info         *Info      // Info dictionary
+	InfoHash     [20]byte   // SHA1 has of the info key
 }
 
 // Decode reads bencoded data from `r` and parses it into a `Metainfo` struct
@@ -53,7 +57,7 @@ func Decode(r io.Reader) (*Metainfo, error) {
 }
 
 func readMetainfoIntoStruct(meta map[string]any) (*Metainfo, error) {
-	announceURL, err := parseString(meta, "announce", true)
+	announceURL, err := utils.ParseString(meta, "announce", true)
 	if err != nil {
 		return nil, err
 	}
@@ -63,22 +67,22 @@ func readMetainfoIntoStruct(meta map[string]any) (*Metainfo, error) {
 		return nil, err
 	}
 
-	creationDate, err := parseInt(meta, "creation date", false)
+	creationDate, err := utils.ParseInt(meta, "creation date", false)
 	if err != nil {
 		return nil, err
 	}
 
-	createdBy, err := parseString(meta, "created by", false)
+	createdBy, err := utils.ParseString(meta, "created by", false)
 	if err != nil {
 		return nil, err
 	}
 
-	encoding, err := parseString(meta, "encoding", false)
+	encoding, err := utils.ParseString(meta, "encoding", false)
 	if err != nil {
 		return nil, err
 	}
 
-	comment, err := parseString(meta, "comment", false)
+	comment, err := utils.ParseString(meta, "comment", false)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +97,11 @@ func readMetainfoIntoStruct(meta map[string]any) (*Metainfo, error) {
 		return nil, err
 	}
 
+	infoHash, err := calculateSHA1Hash(infoRaw)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Metainfo{
 		Announce:     announceURL,
 		AnnounceList: announceList,
@@ -101,21 +110,22 @@ func readMetainfoIntoStruct(meta map[string]any) (*Metainfo, error) {
 		Encoding:     encoding,
 		Comment:      comment,
 		Info:         info,
+		InfoHash:     infoHash,
 	}, nil
 }
 
 func parseInfoDict(d map[string]any) (*Info, error) {
-	pieceLen, err := parseInt(d, "piece length", true)
+	pieceLen, err := utils.ParseInt(d, "piece length", true)
 	if err != nil {
 		return nil, err
 	}
 
-	name, err := parseString(d, "name", true)
+	name, err := utils.ParseString(d, "name", true)
 	if err != nil {
 		return nil, err
 	}
 
-	pstr, err := parseString(d, "pieces", true)
+	pstr, err := utils.ParseString(d, "pieces", true)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +145,7 @@ func parseInfoDict(d map[string]any) (*Info, error) {
 		pieces = append(pieces, p)
 	}
 
-	length, err := parseInt(d, "length", false)
+	length, err := utils.ParseInt(d, "length", false)
 	if err != nil {
 		return nil, err
 	}
@@ -186,46 +196,6 @@ func parseAnnounceList(meta map[string]any) ([][]string, error) {
 	return out, nil
 }
 
-func parseString(m map[string]any, key string, required bool) (string, error) {
-	raw, ok := m[key]
-	if !ok {
-		if required {
-			return "", fmt.Errorf("missing required key %q", key)
-		}
-		return "", nil
-	}
-
-	s, ok := raw.(string)
-	if !ok {
-		if required {
-			return "", fmt.Errorf("key %q is not a string", key)
-		}
-		return "", nil
-	}
-
-	return s, nil
-}
-
-func parseInt(m map[string]any, key string, required bool) (int64, error) {
-	raw, ok := m[key]
-	if !ok {
-		if required {
-			return 0, fmt.Errorf("missing required key %q", key)
-		}
-		return 0, nil
-	}
-
-	s, ok := raw.(int64)
-	if !ok {
-		if required {
-			return 0, fmt.Errorf("key %q is not a string", key)
-		}
-		return 0, nil
-	}
-
-	return s, nil
-}
-
 func parseFiles(m map[string]any) ([]*File, error) {
 	rawFiles, ok := m["files"]
 	if !ok {
@@ -244,12 +214,12 @@ func parseFiles(m map[string]any) ([]*File, error) {
 			return nil, fmt.Errorf("file entry is not a dict")
 		}
 
-		length, err := parseInt(m, "length", true)
+		length, err := utils.ParseInt(m, "length", true)
 		if err != nil {
 			return nil, err
 		}
 
-		md5sum, err := parseString(m, "md5sum", false)
+		md5sum, err := utils.ParseString(m, "md5sum", false)
 		if err != nil {
 			return nil, err
 		}
@@ -274,4 +244,12 @@ func parseFiles(m map[string]any) ([]*File, error) {
 	}
 
 	return files, nil
+}
+
+func calculateSHA1Hash(infoDict map[string]any) ([20]byte, error) {
+	var buf bytes.Buffer
+	if err := bencode.NewEncoder(&buf).Encode(infoDict); err != nil {
+		return [20]byte{}, err
+	}
+	return sha1.Sum(buf.Bytes()), nil
 }
