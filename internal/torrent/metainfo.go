@@ -42,21 +42,18 @@ type Metainfo struct {
 	InfoHash     [20]byte   // SHA1 has of the info key
 }
 
-// Decode reads bencoded data from `r` and parses it into a `Metainfo` struct
-func Decode(r io.Reader) (*Metainfo, error) {
+// DecodeMetainfo reads bencoded data from `r` and parses it into a
+// `Metainfo` struct
+func DecodeMetainfo(r io.Reader) (*Metainfo, error) {
 	raw, err := bencode.NewDecoder(r).Decode()
 	if err != nil {
 		return nil, fmt.Errorf("torrent decode: %w", err)
 	}
-	dict, ok := raw.(map[string]any)
+	meta, ok := raw.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("torrent decode: top-level is not a dict")
 	}
 
-	return readMetainfoIntoStruct(dict)
-}
-
-func readMetainfoIntoStruct(meta map[string]any) (*Metainfo, error) {
 	announceURL, err := utils.ParseString(meta, "announce", true)
 	if err != nil {
 		return nil, err
