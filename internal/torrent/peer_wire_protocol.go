@@ -118,7 +118,6 @@ func ConnectRemotePeer(p *tracker.Peer, opts *ConnectRemotePeerOpts) (*PeerConn,
 		return nil, fmt.Errorf("connect remote peers: dial %s: %w", addr, err)
 	}
 
-	conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	pc := &PeerConn{
 		ID:   p.ID,
 		conn: conn,
