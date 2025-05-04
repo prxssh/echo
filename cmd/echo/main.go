@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/prxssh/echo/internal/ui"
-	"github.com/prxssh/echo/pkg/log"
+	"github.com/prxssh/echo/internal/utils"
 )
 
 func main() {
@@ -14,7 +14,7 @@ func main() {
 }
 
 func setupLogger() {
-	prettyHandler := log.NewHandler(&slog.HandlerOptions{
+	prettyHandler := utils.NewSlogHandler(&slog.HandlerOptions{
 		Level:       slog.LevelInfo,
 		AddSource:   false,
 		ReplaceAttr: nil,

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/prxssh/echo/internal/tracker"
+	"github.com/prxssh/echo/pkg/bitfield"
 )
 
 // peerState Keeps track of whether or not client is interested in remote peer,
@@ -32,9 +33,10 @@ type peerState struct {
 // PeerConn encapsulates the complete information associated with a remote peer
 // and the connection object.
 type PeerConn struct {
-	ID    string
-	conn  net.Conn
-	state *peerState
+	ID       string
+	conn     net.Conn
+	state    *peerState
+	piecesBF bitfield.Bitfield
 }
 
 const (
@@ -45,8 +47,9 @@ const (
 )
 
 type ConnectRemotePeerOpts struct {
-	InfoHash [20]byte
-	ClientID [20]byte
+	InfoHash  [20]byte
+	ClientID  [20]byte
+	NumPieces int64
 }
 
 // ConnectRemotePeer dials the peer, performs the handshake and returns the
@@ -67,6 +70,7 @@ func ConnectRemotePeer(p *tracker.Peer, opts *ConnectRemotePeerOpts) (*PeerConn,
 			peerChoking:    true,
 			peerInterested: false,
 		},
+		piecesBF: bitfield.New(opts.NumPieces),
 	}
 
 	if err := pc.Handshake(opts); err != nil {
@@ -86,6 +90,7 @@ func (pc *PeerConn) Handshake(opts *ConnectRemotePeerOpts) error {
 	}
 
 	if err := pc.verifyHandshake(opts.InfoHash); err != nil {
+		return fmt.Errorf("verify handshake: %w", err)
 	}
 
 	return nil

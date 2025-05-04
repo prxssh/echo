@@ -16,7 +16,7 @@ func TestNewAndLen(t *testing.T) {
 		{0, 0},
 	}
 	for _, tt := range tests {
-		bf := New(tt.nBits)
+		bf := New(int64(tt.nBits))
 		if len(bf) != tt.expBytes {
 			t.Errorf("New(%d) length = %d bytes; want %d", tt.nBits, len(bf), tt.expBytes)
 		}

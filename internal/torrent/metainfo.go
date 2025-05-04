@@ -42,6 +42,10 @@ type Metainfo struct {
 	InfoHash     [20]byte   // SHA1 has of the info key
 }
 
+func (m *Metainfo) NumPieces() int {
+	return (len(m.Info.Pieces) + 7) / 8
+}
+
 // DecodeMetainfo reads bencoded data from `r` and parses it into a
 // `Metainfo` struct
 func DecodeMetainfo(r io.Reader) (*Metainfo, error) {

@@ -6,7 +6,7 @@ import "bytes"
 type Bitfield []byte
 
 // New creates a Bitfield capable of holding n bits
-func New(n int) Bitfield {
+func New(n int64) Bitfield {
 	return make(Bitfield, (n+7)/8)
 }
 

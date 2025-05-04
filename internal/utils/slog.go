@@ -1,4 +1,4 @@
-package log
+package utils
 
 import (
 	"bytes"
@@ -216,7 +216,7 @@ func suppressDefaults(
 	}
 }
 
-func New(handlerOptions *slog.HandlerOptions, options ...Option) *Handler {
+func NewSlogLogger(handlerOptions *slog.HandlerOptions, options ...Option) *Handler {
 	if handlerOptions == nil {
 		handlerOptions = &slog.HandlerOptions{}
 	}
@@ -240,8 +240,8 @@ func New(handlerOptions *slog.HandlerOptions, options ...Option) *Handler {
 	return handler
 }
 
-func NewHandler(opts *slog.HandlerOptions) *Handler {
-	return New(
+func NewSlogHandler(opts *slog.HandlerOptions) *Handler {
+	return NewSlogLogger(
 		opts,
 		WithDestinationWriter(os.Stdout),
 		WithColor(),
