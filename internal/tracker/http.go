@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/prxssh/echo/internal/bencode"
-	"github.com/prxssh/echo/pkg/utils"
+	"github.com/prxssh/echo/internal/utils"
 )
 
 // HTTPTrackerClient is an HTTP-based implementation of ITrackerProtocol

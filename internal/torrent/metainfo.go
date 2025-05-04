@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/prxssh/echo/internal/bencode"
-	"github.com/prxssh/echo/pkg/utils"
+	"github.com/prxssh/echo/internal/utils"
 )
 
 // File represents a file in a multi-file torrent
@@ -17,29 +17,27 @@ type File struct {
 	Path    []string // Path components (directories + filename)
 }
 
-type Piece [20]byte
-
 // Info holds the "info" dictionary of the torrent, merged for single and multi
 // file mode
 type Info struct {
-	Name     string  // Filename (single-file) or directory name (mult-file)
-	Length   int64   // File length (single-file) or zero for multi-file
-	Files    []*File // List of files (multi-file) or nil for single-file
-	PieceLen int64   // Number of bytes in each piece
-	Pieces   []Piece // Concatenated 20-byte SHA1 hashes
-	Private  bool    // Whether the torrent is private
+	Name     string            // Filename (single-file) or directory name (mult-file)
+	Length   int64             // File length (single-file) or zero for multi-file
+	Files    []*File           // List of files (multi-file) or nil for single-file
+	PieceLen int64             // Number of bytes in each piece
+	Pieces   [][sha1.Size]byte // Concatenated 20-byte SHA1 hashes
+	Private  bool              // Whether the torrent is private
 }
 
 // Metainfo represents the top-level of .torrent file structure
 type Metainfo struct {
-	Announce     string     // Tracker URL
-	AnnounceList [][]string // Optional list of tracker URLs
-	CreationDate int64      // Optional creation date (zero value if absent)
-	Comment      string     // Optional comment
-	CreatedBy    string     // Optional creator identifier
-	Encoding     string     // Optional text encoding
-	Info         *Info      // Info dictionary
-	InfoHash     [20]byte   // SHA1 has of the info key
+	Announce     string          // Tracker URL
+	AnnounceList [][]string      // Optional list of tracker URLs
+	CreationDate int64           // Optional creation date (zero value if absent)
+	Comment      string          // Optional comment
+	CreatedBy    string          // Optional creator identifier
+	Encoding     string          // Optional text encoding
+	Info         *Info           // Info dictionary
+	InfoHash     [sha1.Size]byte // SHA1 has of the info key
 }
 
 func (m *Metainfo) NumPieces() int {
@@ -48,7 +46,7 @@ func (m *Metainfo) NumPieces() int {
 
 // DecodeMetainfo reads bencoded data from `r` and parses it into a
 // `Metainfo` struct
-func DecodeMetainfo(r io.Reader) (*Metainfo, error) {
+func UnmarshalMetainfo(r io.Reader) (*Metainfo, error) {
 	raw, err := bencode.NewDecoder(r).Decode()
 	if err != nil {
 		return nil, fmt.Errorf("torrent decode: %w", err)
@@ -138,9 +136,9 @@ func parseInfoDict(d map[string]any) (*Info, error) {
 			plen,
 		)
 	}
-	var pieces []Piece
+	var pieces [][sha1.Size]byte
 	for i := 0; i < plen; i += 20 {
-		var p Piece
+		var p [sha1.Size]byte
 
 		copy(p[:], pbytes[i:i+20])
 		pieces = append(pieces, p)
@@ -247,10 +245,10 @@ func parseFiles(m map[string]any) ([]*File, error) {
 	return files, nil
 }
 
-func calculateSHA1Hash(infoDict map[string]any) ([20]byte, error) {
+func calculateSHA1Hash(infoDict map[string]any) ([sha1.Size]byte, error) {
 	var buf bytes.Buffer
 	if err := bencode.NewEncoder(&buf).Encode(infoDict); err != nil {
-		return [20]byte{}, err
+		return [sha1.Size]byte{}, err
 	}
 	return sha1.Sum(buf.Bytes()), nil
 }

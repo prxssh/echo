@@ -1,44 +1,29 @@
 package ui
 
 import (
-	"fmt"
-	"io"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
+	"github.com/prxssh/echo/internal/torrent"
 )
 
 type Echo struct {
 	app    fyne.App
 	window fyne.Window
+
+	torrentClient *torrent.Client
 }
 
 func NewEchoApp() *Echo {
 	a := app.New()
 	w := a.NewWindow("Echo - BitTorrent Client")
-	return &Echo{app: a, window: w}
+
+	return &Echo{app: a, window: w, torrentClient: torrent.NewClient()}
 }
 
 func (e *Echo) Run() {
-	addBtn := widget.NewButton("Upload .torrent", func() {
-		d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
-			if err != nil || r == nil {
-				return
-			}
-			defer r.Close()
-
-			content, _ := io.ReadAll(r)
-			fmt.Printf("Loaded torrent (%d bytes)\n", len(content))
-		}, e.window)
-		d.SetFilter(storage.NewExtensionFileFilter([]string{".torrent"}))
-		d.Show()
-	})
-
-	toolbar := container.NewHBox(addBtn)
+	toolbar := container.NewHBox(e.ButtonUploadTorrent())
 	list := widget.NewList(
 		func() int { return 0 },
 		func() fyne.CanvasObject { return widget.NewLabel("") },

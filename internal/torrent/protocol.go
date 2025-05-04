@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/prxssh/echo/internal/bitfield"
 	"github.com/prxssh/echo/internal/tracker"
-	"github.com/prxssh/echo/pkg/bitfield"
 )
 
 // peerState Keeps track of whether or not client is interested in remote peer,
