@@ -133,7 +133,6 @@ defmodule Echo.Tracker.UDPClient do
 
   defp build_packet(@action_announce, connection_id, transaction_id, attrs) do
     key = :crypto.strong_rand_bytes(4)
-    {ip, num_want} = {attrs[:ip] || 0, attrs[:numwant] || 50}
     event_code = to_event_code(attrs[:event])
 
     <<
@@ -146,10 +145,10 @@ defmodule Echo.Tracker.UDPClient do
       attrs.left::64,
       attrs.uploaded::64,
       event_code::32,
-      ip::32,
+      attrs[:ip] || 0::32,
       key::bytes-size(4),
-      num_want::32,
-      attrs.port::16
+      attrs[:numwant] || 50::32,
+      attrs[:port] || 0::16
     >>
   end
 
