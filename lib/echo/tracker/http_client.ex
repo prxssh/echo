@@ -2,8 +2,8 @@ defmodule Echo.Tracker.HTTPClient do
   @moduledoc """
   An HTTP-based BitTorrent tracker client.
 
-  `Echo.Tracker.HTTPClient` implements `Echo.Tracker.Behaviour` and provides a
-  standardized way to announce to and scrape from HTTP trackers.
+  This module implements `Echo.Tracker.Behaviour` and provides a standardized
+  way to announce to and scrape from HTTP trackers.
   """
   @behaviour Echo.Tracker.Behaviour
 
@@ -33,9 +33,14 @@ defmodule Echo.Tracker.HTTPClient do
     url
     |> Req.get(params: params)
     |> case do
-      {:ok, %Req.Response{status: 200, body: body}} -> parse_tracker_announce_response(body)
-      {:ok, %Req.Response{body: error}} -> {:error, inspect(error)}
-      {:error, reason} -> {:error, reason}
+      {:ok, %Req.Response{status: 200, body: body}} ->
+        parse_tracker_announce_response(body)
+
+      {:ok, %Req.Response{body: error}} ->
+        {:error, "[tracker] announce request failed, error: #{inspect(error)}"}
+
+      {:error, reason} ->
+        {:error, "[tracker] req failed to do get request, error: #{inspect(reason)}"}
     end
   end
 
@@ -46,10 +51,10 @@ defmodule Echo.Tracker.HTTPClient do
   defp parse_tracker_announce_response(binary) do
     case BencodeDecoder.decode(binary) do
       {:ok, %{"failure reason" => reason}} ->
-        {:error, reason}
+        {:error, "[tracker] announce failed, error: #{reason}"}
 
       {:ok, %{"warning message" => reason}} ->
-        {:error, reason}
+        {:error, "[tracker] announce warning, error: #{reason}"}
 
       {:ok, decoded} ->
         {:ok,

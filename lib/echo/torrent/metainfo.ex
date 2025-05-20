@@ -78,14 +78,14 @@ defmodule Echo.Torrent.Metainfo do
     end
   end
 
-  def parse(other), do: {:error, "metainfo: expected map but got '#{inspect(other)}'"}
+  def parse(other), do: {:error, "[metainfo] expected map but got '#{inspect(other)}'"}
 
   ########## Private
 
   @spec parse_announce_urls(nil | String.t(), nil | [String.t()]) ::
           {:ok, [String.t()]} | {:error, String.t()}
   defp parse_announce_urls(nil, nil),
-    do: {:error, "metainfo: expected announce urls but found none"}
+    do: {:error, "[metainfo] expected announce urls but found none"}
 
   defp parse_announce_urls(announce, announce_list) do
     {:ok,
@@ -105,13 +105,13 @@ defmodule Echo.Torrent.Metainfo do
     |> DateTime.from_unix()
     |> case do
       {:ok, dt} -> DateTime.to_naive(dt)
-      {:error, reason} -> {:error, "metainfo: invalid creation date, error: #{inspect(reason)}"}
+      {:error, reason} -> {:error, "[metainfo] invalid creation date, error: #{inspect(reason)}"}
     end
   end
 
   @spec generate_info_hash(nil | map()) :: {:ok, binary()} | {:error, String.t()}
   defp generate_info_hash(nil),
-    do: {:error, "metainfo: expected info hash dictionary, but got nil"}
+    do: {:error, "[metainfo] expected info hash dictionary, but got nil"}
 
   defp generate_info_hash(info_raw) do
     case BencodeEncoder.encode(info_raw) do
@@ -121,12 +121,12 @@ defmodule Echo.Torrent.Metainfo do
   end
 
   @spec parse_info_dict(nil | map()) :: {:ok, map()} | {:error, String.t()}
-  defp parse_info_dict(nil), do: {:error, "metainfo: expected info hash dictionary, but got nil"}
+  defp parse_info_dict(nil), do: {:error, "[metainfo] expected info hash dictionary, but got nil"}
 
   defp parse_info_dict(info) do
     get_field = fn map, key ->
       case Map.get(map, key) do
-        nil -> {:error, "metainfo: expected #{key} but got nil"}
+        nil -> {:error, "[metainfo] expected #{key} but got nil"}
         val -> {:ok, val}
       end
     end
@@ -155,7 +155,7 @@ defmodule Echo.Torrent.Metainfo do
   end
 
   @spec parse_pieces(nil | binary()) :: {:ok, [binary()]} | {:error, String.t()}
-  defp parse_pieces(nil), do: {:error, "metainfo: expected pieces but got nil"}
+  defp parse_pieces(nil), do: {:error, "[metainfo] expected pieces but got nil"}
 
   defp parse_pieces(pieces) do
     total = byte_size(pieces)
@@ -164,7 +164,7 @@ defmodule Echo.Torrent.Metainfo do
       chunks = for <<hash::binary-size(20) <- pieces>>, do: hash
       {:ok, chunks}
     else
-      {:error, "metainfo: piece length must be a multiple of 20, got #{total} bytes"}
+      {:error, "[metainfo] piece length must be a multiple of 20, got #{total} bytes"}
     end
   end
 
@@ -176,10 +176,10 @@ defmodule Echo.Torrent.Metainfo do
       %{"length" => length, "path" => path_list}, {:ok, acc} ->
         cond do
           not is_integer(length) ->
-            {:halt, {:error, "metainfo: files length must be integer"}}
+            {:halt, {:error, "[metainfo] files length must be integer"}}
 
           not (is_list(path_list) and Enum.all?(path_list, &is_binary/1)) ->
-            {:halt, {:error, "metainfo: file paths must be list of strings"}}
+            {:halt, {:error, "[metainfo] file paths must be list of strings"}}
 
           true ->
             file = %{length: length, path: path_list}
@@ -187,7 +187,7 @@ defmodule Echo.Torrent.Metainfo do
         end
 
       _, _ ->
-        {:halt, {:error, "metainfo: files expected list of maps but got '#{inspect(files)}'"}}
+        {:halt, {:error, "[metainfo] files expected list of maps but got '#{inspect(files)}'"}}
     end)
   end
 end
