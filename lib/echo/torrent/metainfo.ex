@@ -90,6 +90,7 @@ defmodule Echo.Torrent.Metainfo do
   defp parse_announce_urls(announce, announce_list) do
     {:ok,
      announce_list
+     |> List.wrap()
      |> List.flatten()
      |> List.insert_at(0, announce)
      |> Enum.uniq()}
