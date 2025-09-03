@@ -20,10 +20,24 @@ const (
 	bDelim   bType = 'e'
 )
 
+// NewDecoder returns a Decoder that reads bencoded values from r.
+//
+// The decoder reads exactly one complete value per call to Decode. If
+// additional data follows, subsequent calls to Decode will continue parsing
+// from the current position.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{r: bufio.NewReader(r)}
 }
 
+// Decode reads and returns the next bencoded value from the input.
+//
+// It produces the following Go concrete types:
+//   - string for bencoded strings
+//   - int64 for integers
+//   - []any for lists
+//   - map[string]any for dictionaries
+//
+// On malformed input, Decode returns a non-nil error.
 func (d *Decoder) Decode() (any, error) {
 	btype, err := d.r.ReadByte()
 	if err != nil {
@@ -53,10 +67,14 @@ func (d *Decoder) Decode() (any, error) {
 	return val, nil
 }
 
+// decodeInteger parses an integer of the form i<number>e.
 func (d *Decoder) decodeInteger() (int64, error) {
 	return d.readInteger(bDelim)
 }
 
+// decodeString parses a length-prefixed string of the form <len>:<bytes>.
+// It returns an error if the declared length is negative or if the input does
+// not contain enough bytes.
 func (d *Decoder) decodeString() (string, error) {
 	size, err := d.readInteger(':')
 	if err != nil {
@@ -78,6 +96,8 @@ func (d *Decoder) decodeString() (string, error) {
 	return string(buf), nil
 }
 
+// decodeList parses a list, recursively decoding each element until it reaches
+// the terminating 'e'.
 func (d *Decoder) decodeList() ([]any, error) {
 	list := make([]any, 0)
 
@@ -101,6 +121,8 @@ func (d *Decoder) decodeList() ([]any, error) {
 	return list, nil
 }
 
+// decodeDict parses a dictionary, expecting keys to be bencoded strings, and
+// recursively decodes their associated values.
 func (d *Decoder) decodeDict() (map[string]any, error) {
 	dict := make(map[string]any)
 
@@ -129,6 +151,7 @@ func (d *Decoder) decodeDict() (map[string]any, error) {
 	return dict, nil
 }
 
+// readInteger reads a base-10 signed integer terminated by delim.
 func (d *Decoder) readInteger(delim bType) (int64, error) {
 	read, err := d.r.ReadBytes(byte(delim))
 	if err != nil {

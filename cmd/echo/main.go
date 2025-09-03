@@ -1,16 +1,30 @@
 package main
 
 import (
+	"bytes"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/prxssh/echo/internal/torrent"
 	"github.com/prxssh/echo/pkg/logging"
 )
 
 func main() {
 	setupLogger()
-	slog.Info("echo is up and running...")
+
+	data, err := os.ReadFile("./data/fedora.torrent")
+	if err != nil {
+		os.Exit(1)
+	}
+
+	buf := bytes.NewBuffer(data)
+	metainfo, err := torrent.New(buf)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	slog.Info("read torrent file from path", slog.Any("metainfo", metainfo))
 }
 
 func setupLogger() {

@@ -2,7 +2,10 @@ module github.com/prxssh/echo
 
 go 1.25.0
 
-require github.com/fatih/color v1.18.0
+require (
+	github.com/fatih/color v1.18.0
+	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
+)
 
 require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
