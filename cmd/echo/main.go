@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"log/slog"
 	"os"
 	"time"
@@ -13,18 +12,16 @@ import (
 func main() {
 	setupLogger()
 
-	data, err := os.ReadFile("./data/fedora.torrent")
+	torrent, err := torrent.ReadFile("./data/ubuntu.torrent")
 	if err != nil {
+		slog.Error(
+			"failed to read torrent from path",
+			slog.Any("error", err),
+		)
 		os.Exit(1)
 	}
 
-	buf := bytes.NewBuffer(data)
-	metainfo, err := torrent.New(buf)
-	if err != nil {
-		os.Exit(1)
-	}
-
-	slog.Info("read torrent file from path", slog.Any("metainfo", metainfo))
+	slog.Info("torrent info", slog.Any("torrent", torrent))
 }
 
 func setupLogger() {

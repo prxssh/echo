@@ -27,6 +27,10 @@ type HTTPTrackerClient struct {
 // Ensure HTTPTrackerClient implements Tracker.
 var _ Tracker = (*HTTPTrackerClient)(nil)
 
+var ErrScrapeNotSupported = fmt.Errorf(
+	"tracker: scrape not supported by announce URL",
+)
+
 const (
 	// Query parameters
 	paramInfoHash   = "info_hash"
@@ -90,11 +94,25 @@ func (c *HTTPTrackerClient) Announce(
 	return parseAnnounceResponse(resp.Body)
 }
 
+func (c *HTTPTrackerClient) IsScrapingSupported() bool {
+	path := c.announceURL.Path
+	lastSlash := strings.LastIndex(path, "/")
+	if lastSlash == -1 {
+		return false
+	}
+
+	return strings.HasPrefix(path[lastSlash:], "announce")
+}
+
 // Scrape queries the tracker's scrape endpoint for aggregate swarm statistics.
 func (c *HTTPTrackerClient) Scrape(
 	ctx context.Context,
 	params *ScrapeParams,
 ) (*ScrapeResponse, error) {
+	if !c.IsScrapingSupported() {
+		return nil, ErrScrapeNotSupported
+	}
+
 	scrapeURL, err := c.buildScrapeURL(params)
 	if err != nil {
 		return nil, err
@@ -318,12 +336,6 @@ func parseDictPeers(peerList []any) ([]*Peer, error) {
 	return peers, nil
 }
 
-// ErrScrapeNotSupported indicates the tracker does not expose an HTTP scrape
-// endpoint derived from the announce URL.
-var ErrScrapeNotSupported = fmt.Errorf(
-	"tracker: scrape not supported by announce URL",
-)
-
 // buildScrapeURL returns the scrape URL with repeated info_hash parameters.
 // Only trackers whose announce URL ends with a segment containing "announce"
 // are considered to support scrape. Otherwise, ErrScrapeNotSupported is
@@ -334,28 +346,21 @@ func (c *HTTPTrackerClient) buildScrapeURL(
 	u := *c.announceURL
 	path := u.Path
 
-	// Determine last path segment and validate support.
-	last := path
-	if idx := strings.LastIndex(path, "/"); idx >= 0 {
-		last = path[idx+1:]
-	}
-	if !strings.Contains(strings.ToLower(last), "announce") {
-		return "", ErrScrapeNotSupported
-	}
-
-	// Replace announce with scrape in the last segment.
-	if strings.HasSuffix(path, "/announce") {
-		u.Path = strings.TrimSuffix(path, "announce") + "scrape"
-	} else {
-		// Handles cases like announce.php, announce.json, etc.
-		u.Path = strings.TrimSuffix(path, last) + strings.Replace(last, "announce", "scrape", 1)
-	}
+	// idx will never be -1 here
+	idx := strings.LastIndex(path, "/")
+	u.Path = path[:idx] + strings.Replace(
+		path[idx+1:],
+		"announce",
+		"scrape",
+		1,
+	)
 
 	q := u.Query()
 	for _, h := range params.InfoHashes {
 		q.Add(paramInfoHash, string(h[:]))
 	}
 	u.RawQuery = q.Encode()
+
 	return u.String(), nil
 }
 

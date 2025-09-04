@@ -20,6 +20,8 @@ type Tracker interface {
 		params *AnnounceParams,
 	) (*AnnounceResponse, error)
 
+	IsScrapingSupported() bool
+
 	// Scrape retrieves aggregate swarm statistics for one or more
 	// infohashes.
 	Scrape(
@@ -152,7 +154,7 @@ const (
 	EventCompleted Event = "completed"
 )
 
-func NewTracker(announceURL string) (Tracker, error) {
+func New(announceURL string) (Tracker, error) {
 	url, err := url.Parse(announceURL)
 	if err != nil {
 		return nil, fmt.Errorf(
