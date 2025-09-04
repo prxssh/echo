@@ -3,7 +3,9 @@ package tracker
 import (
 	"context"
 	"crypto/sha1"
+	"fmt"
 	"net"
+	"net/url"
 	"time"
 )
 
@@ -87,7 +89,7 @@ type AnnounceResponse struct {
 
 	// Peers is the set of peer candidates returned by the tracker.
 	// Implementations may populate from compact or non-compact responses.
-	Peers []Peer
+	Peers []*Peer
 }
 
 // Peer describes a peer candidate returned by a tracker.
@@ -150,6 +152,23 @@ const (
 	EventCompleted Event = "completed"
 )
 
-func NewTracker(announceURLs []string) (Tracker, error) {
-	return nil, nil
+func NewTracker(announceURL string) (Tracker, error) {
+	url, err := url.Parse(announceURL)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"tracker: invalid announce url %q:%w",
+			announceURL,
+			err,
+		)
+	}
+
+	switch url.Scheme {
+	case "http", "https":
+		return newHTTPTrackerClient(url)
+	default:
+		return nil, fmt.Errorf(
+			"tracker: unsupported schema %q",
+			url.Scheme,
+		)
+	}
 }
