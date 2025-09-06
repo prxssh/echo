@@ -144,6 +144,10 @@ type ScrapeStats struct {
 type Event string
 
 const (
+	// EventNone indicates that nothing has started yet. This is just used
+	// as a sentinel value internally.
+	EventNone Event = "none"
+
 	// EventStarted indicates the client has started downloading.
 	EventStarted Event = "started"
 

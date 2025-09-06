@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prxssh/echo/internal/bitfield"
 	"github.com/prxssh/echo/internal/tracker"
 )
 
@@ -19,6 +20,8 @@ type Peer struct {
 	conn net.Conn
 	// state holds the local and remote choke/interest flags.
 	state *PeerState
+	// Bitfield keeps track of the pieces a peer has.
+	pieceBF bitfield.Bitfield
 }
 
 // PeerState tracks local and remote choke/interest flags for a connection.
@@ -75,9 +78,10 @@ func ConnectRemotePeers(
 			}
 
 			peer := &Peer{
-				Addr:  addr,
-				conn:  conn,
-				state: initPeerState(),
+				Addr:    addr,
+				conn:    conn,
+				pieceBF: bitfield.New(opts.Pieces),
+				state:   initPeerState(),
 			}
 			if err := peer.performHandshake(opts); err != nil {
 				slog.Error(
@@ -154,7 +158,7 @@ func (p *Peer) readMessages() {
 
 		switch msg.ID {
 		case MsgBitfield:
-			return
+			p.pieceBF = bitfield.FromBytes(msg.Payload)
 
 		case MsgChoke:
 			p.state.PeerChoking = true

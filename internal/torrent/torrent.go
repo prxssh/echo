@@ -2,7 +2,10 @@ package torrent
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/sha1"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -12,6 +15,7 @@ import (
 )
 
 type Torrent struct {
+	PeerID     [sha1.Size]byte
 	Metainfo   *Metainfo
 	Trackers   []tracker.Tracker
 	Uploaded   uint64
@@ -25,7 +29,7 @@ func ReadFile(path string) (*Torrent, error) {
 		return nil, err
 	}
 
-	metainfo, err := New(bytes.NewBuffer(data))
+	metainfo, err := ParseMetainfo(bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -35,16 +39,17 @@ func ReadFile(path string) (*Torrent, error) {
 		return nil, err
 	}
 
+	peerID, err := generatePeerID()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Torrent{
+		PeerID:   peerID,
 		Metainfo: metainfo,
 		Trackers: trackers,
 		Left:     metainfo.Size,
 	}, nil
-}
-
-// Start a goroutine for announce that
-// Start a goroutine for scrape (if supported)
-func (t *Torrent) Start() {
 }
 
 func initializeTrackers(announceURLs []string) ([]tracker.Tracker, error) {
@@ -85,4 +90,17 @@ func initializeTrackers(announceURLs []string) ([]tracker.Tracker, error) {
 		return nil, errors.New("no trackers available")
 	}
 	return trackers, nil
+}
+
+func generatePeerID() ([sha1.Size]byte, error) {
+	var peerID [sha1.Size]byte
+
+	prefix := []byte("-EC0001-")
+	copy(peerID[:], prefix)
+
+	if _, err := rand.Read(peerID[len(prefix):]); err != nil {
+		return [sha1.Size]byte{}, fmt.Errorf("rand.Read: %w", err)
+	}
+
+	return peerID, nil
 }
