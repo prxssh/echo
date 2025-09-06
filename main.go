@@ -1,13 +1,12 @@
 package main
 
 import (
-	"context"
 	"embed"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/prxssh/echo/internal/ui"
 	"github.com/prxssh/echo/pkg/logging"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -19,17 +18,15 @@ var assets embed.FS
 
 func main() {
 	setupLogger()
+	app := ui.New()
 
 	err := wails.Run(&options.App{
-		Title:  "Echo - BitTorrent Client & Search Engine",
-		Width:  1024,
-		Height: 768,
+		Title:      "Echo - BitTorrent Client & Search Engine",
+		Fullscreen: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup: func(ctx context.Context) {
-			fmt.Println("hello")
-		},
+		Bind:             []interface{}{app},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 	})
 	if err != nil {

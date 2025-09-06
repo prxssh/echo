@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 
 	"github.com/prxssh/echo/internal/tracker"
@@ -15,31 +14,26 @@ import (
 )
 
 type Torrent struct {
-	PeerID     [sha1.Size]byte
-	Metainfo   *Metainfo
-	Trackers   []tracker.Tracker
-	Uploaded   uint64
-	Downloaded uint64
-	Left       uint64
+	PeerID     [sha1.Size]byte   `json:"-"`
+	Metainfo   *Metainfo         `json:"metainfo"`
+	Trackers   []tracker.Tracker `json:"-"`
+	Uploaded   uint64            `json:"uploaded"`
+	Downloaded uint64            `json:"downloaded"`
+	Left       uint64            `json:"left"`
 }
 
-func ReadFile(path string) (*Torrent, error) {
-	data, err := os.ReadFile(path)
+func ParseTorrent(data []byte) (*Torrent, error) {
+	peerID, err := generatePeerID()
 	if err != nil {
 		return nil, err
 	}
 
-	metainfo, err := ParseMetainfo(bytes.NewBuffer(data))
+	metainfo, err := parseMetainfo(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 
 	trackers, err := initializeTrackers(metainfo.AnnounceURLs)
-	if err != nil {
-		return nil, err
-	}
-
-	peerID, err := generatePeerID()
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +61,7 @@ func initializeTrackers(announceURLs []string) ([]tracker.Tracker, error) {
 				slog.Warn(
 					"failed to initialize new tracker",
 					slog.String("announceURL", u),
-					slog.Any("error", err),
+					slog.String("error", err.Error()),
 				)
 
 				return nil

@@ -19,35 +19,35 @@ type Metainfo struct {
 	// Info: the "info" dictionary that describes the payload. Its exact
 	// shape differs between single-file and multi-file torrents and is used
 	// to compute the infohash.
-	Info *Info
+	Info *Info `json:"info"`
 
 	// AnnounceURLs contains all tracker announce URLs discovered from
 	// "announce" and/or "announce-list" fields, in order of tiers if
 	// applicable.
-	AnnounceURLs []string
+	AnnounceURLs []string `json:"announceUrls"`
 
 	// CreationDate is the optional creation timestamp of the torrent, if
 	// present in the metainfo. If absent, it is the zero time.
-	CreationDate time.Time
+	CreationDate time.Time `json:"creationDate"`
 
 	// Comment is an optional, free-form human-readable note set by the
 	// creator.
-	Comment string
+	Comment string `json:"comment"`
 
 	// Encoding is the optional character encoding for string fields when
 	// not UTF-8 (rare; most modern torrents are UTF-8). It corresponds to
 	// the top-level "encoding" key in the metainfo.
-	Encoding string
+	Encoding string `json:"encoding"`
 
 	// Mode indicates whether the torrent is in single-file or multi-file
 	// mode. It is typically derived from the presence of the Info.Files
 	// field.
-	Mode FileMode
+	Mode FileMode `json:"-"`
 
 	// Size is the total size of the payload in bytes. For multi-file
 	// torrents this is the sum of all file lengths; for single-file
 	// torrents it is the length of the single file.
-	Size uint64
+	Size uint64 `json:"size"`
 }
 
 // Info is the bencoded "info" dictionary that describes the file(s) and
@@ -56,42 +56,42 @@ type Info struct {
 	// Hash is the 20-byte SHA-1 of the raw bencoded "info" dictionary (the
 	// BitTorrent v1 infohash). This is the identifier used to locate peers
 	// for the torrent.
-	Hash [sha1.Size]byte
+	Hash [sha1.Size]byte `json:"infoHash"`
 
 	// Name is the suggested display name. In multi-file mode this is the
 	// name of the top-level directory; in single-file mode it is the
 	// filename.
-	Name string
+	Name string `json:"name"`
 
 	// Files lists the files in multi-file mode. It is nil in single-file
 	// mode. Each entry contains a relative path as a sequence of path
 	// elements.
-	Files *[]File
+	Files *[]File `json:"files"`
 
 	// PieceLength is the number of bytes per piece. All pieces except the
 	// last are this size; the last may be shorter.
-	PieceLength uint64
+	PieceLength uint64 `json:"pieceLength"`
 
 	// Pieces holds the 20-byte SHA-1 hash of each piece, in order. In the
 	// .torrent file this data is stored as a single string formed by
 	// concatenating the 20-byte hashes.
-	Pieces [][sha1.Size]byte
+	Pieces [][sha1.Size]byte `json:"pieces"`
 
 	// Private indicates the BEP 27 "private" flag. When true, clients MUST
 	// restrict peer discovery to the trackers in the metainfo (no DHT, PEX,
 	// or Local Service Discovery).
-	Private bool
+	Private bool `json:"private"`
 }
 
 // File represents a single file entry within a multi-file torrent.
 type File struct {
 	// Length is the exact size of this file in bytes.
-	Length uint64
+	Length uint64 `json:"length"`
 
 	// Path is the relative path of the file expressed as path elements. For
 	// example, a file "dir1/dir2/file.ext" is represented as
 	// []string{"dir1", "dir2", "file.ext"}.
-	Path []string
+	Path []string `json:"path"`
 }
 
 // FileMode identifies whether the "info" dictionary is single- or multi-file.
@@ -104,7 +104,7 @@ const (
 	FileModeMultiple FileMode = "multiple"
 )
 
-func New(r io.Reader) (*Metainfo, error) {
+func parseMetainfo(r io.Reader) (*Metainfo, error) {
 	p, err := newParser(r)
 	if err != nil {
 		return nil, err
