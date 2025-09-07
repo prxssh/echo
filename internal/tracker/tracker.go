@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -13,6 +14,9 @@ import (
 // HTTP/HTTPS, UDP, or other tracker transports. Calls are expected to be
 // idempotent and respect the provided context for cancellation/timeouts.
 type Tracker interface {
+	// URL returns the underlying url associated with this tracker
+	URL() string
+
 	// Announce notifies the tracker of the client's state for a single
 	// torrent and retrieves peer candidates and tracker directives.
 	Announce(
@@ -20,7 +24,9 @@ type Tracker interface {
 		params *AnnounceParams,
 	) (*AnnounceResponse, error)
 
-	IsScrapingSupported() bool
+	// SupportsScrape returns a boolean for whether the tracker
+	// supports scraping or not.
+	SupportsScrape() bool
 
 	// Scrape retrieves aggregate swarm statistics for one or more
 	// infohashes.
@@ -96,14 +102,15 @@ type AnnounceResponse struct {
 
 // Peer describes a peer candidate returned by a tracker.
 type Peer struct {
-	// ID is the optional 20-byte peer id, when provided by the tracker.
-	ID string
-
 	// IP is the IPv4 or IPv6 address of the peer.
 	IP net.IP
 
 	// Port is the TCP port on which the peer accepts incoming connections.
 	Port uint16
+}
+
+func (p *Peer) String() string {
+	return net.JoinHostPort(p.IP.String(), strconv.Itoa(int(p.Port)))
 }
 
 // ScrapeParams carries infohashes to query in a scrape request.
@@ -140,25 +147,29 @@ type ScrapeStats struct {
 	Name string
 }
 
-// Event enumerates tracker announce lifecycle events.
-type Event string
+type Event uint8
 
 const (
-	// EventNone indicates that nothing has started yet. This is just used
-	// as a sentinel value internally.
-	EventNone Event = "none"
-
-	// EventStarted indicates the client has started downloading.
-	EventStarted Event = "started"
-
-	// EventStopped indicates the client is gracefully shutting down.
-	EventStopped Event = "stopped"
-
-	// EventCompleted indicates the client has finished downloading.
-	EventCompleted Event = "completed"
+	EventNone Event = iota
+	EventStarted
+	EventStopped
+	EventCompleted
 )
 
-func New(announceURL string) (Tracker, error) {
+func (e Event) String() string {
+	switch e {
+	case EventNone:
+		return ""
+	case EventStarted:
+		return "started"
+	case EventStopped:
+		return "stopped"
+	default:
+		return "completed"
+	}
+}
+
+func NewTracker(announceURL string) (Tracker, error) {
 	url, err := url.Parse(announceURL)
 	if err != nil {
 		return nil, fmt.Errorf(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -24,10 +25,7 @@ type HTTPTrackerClient struct {
 	client      *http.Client
 }
 
-// Ensure HTTPTrackerClient implements Tracker.
-var _ Tracker = (*HTTPTrackerClient)(nil)
-
-var ErrScrapeNotSupported = fmt.Errorf(
+var ErrScrapeNotSupported = errors.New(
 	"tracker: scrape not supported by announce URL",
 )
 
@@ -65,6 +63,8 @@ func newHTTPTrackerClient(u *url.URL) (*HTTPTrackerClient, error) {
 	return &HTTPTrackerClient{announceURL: u, client: &http.Client{}}, nil
 }
 
+func (c *HTTPTrackerClient) URL() string { return c.announceURL.String() }
+
 // Announce sends an announce request and parses the response.
 func (c *HTTPTrackerClient) Announce(
 	ctx context.Context,
@@ -94,14 +94,14 @@ func (c *HTTPTrackerClient) Announce(
 	return parseAnnounceResponse(resp.Body)
 }
 
-func (c *HTTPTrackerClient) IsScrapingSupported() bool {
+func (c *HTTPTrackerClient) SupportsScrape() bool {
 	path := c.announceURL.Path
 	lastSlash := strings.LastIndex(path, "/")
 	if lastSlash == -1 {
 		return false
 	}
 
-	return strings.HasPrefix(path[lastSlash:], "announce")
+	return strings.HasPrefix(path[lastSlash+1:], "announce")
 }
 
 // Scrape queries the tracker's scrape endpoint for aggregate swarm statistics.
@@ -109,7 +109,7 @@ func (c *HTTPTrackerClient) Scrape(
 	ctx context.Context,
 	params *ScrapeParams,
 ) (*ScrapeResponse, error) {
-	if !c.IsScrapingSupported() {
+	if !c.SupportsScrape() {
 		return nil, ErrScrapeNotSupported
 	}
 
@@ -152,8 +152,6 @@ func (c *HTTPTrackerClient) buildAnnounceRequest(
 	reqURL := *c.announceURL
 	q := reqURL.Query()
 
-	// info_hash and peer_id are raw 20-byte values that must be
-	// URL-encoded.
 	q.Set(paramInfoHash, string(params.InfoHash[:]))
 	q.Set(paramPeerID, string(params.PeerID[:]))
 
@@ -172,8 +170,8 @@ func (c *HTTPTrackerClient) buildAnnounceRequest(
 	if params.TrackerID != "" {
 		q.Set(paramTrackerID, params.TrackerID)
 	}
-	if params.Event != "" {
-		q.Set(paramEvent, string(params.Event))
+	if params.Event != EventNone {
+		q.Set(paramEvent, params.Event.String())
 	}
 
 	reqURL.RawQuery = q.Encode()
@@ -256,6 +254,8 @@ func parsePeers(data map[string]any) ([]*Peer, error) {
 	switch peers := peersData.(type) {
 	case string:
 		return parseCompactPeers([]byte(peers))
+	case []byte:
+		return parseCompactPeers(peers)
 	case []any:
 		return parseDictPeers(peers)
 	default:
@@ -265,7 +265,7 @@ func parsePeers(data map[string]any) ([]*Peer, error) {
 
 // parseCompactPeers parses the compact peer list format (6 bytes per peer).
 func parseCompactPeers(peerData []byte) ([]*Peer, error) {
-	const peerSize = 6 // 4 bytes for IP, 2 for port.
+	peerSize := 6 // 4 bytes for IP, 2 for port.
 	if len(peerData)%peerSize != 0 {
 		return nil, fmt.Errorf(
 			"invalid compact peer list length: %d",
@@ -278,11 +278,16 @@ func parseCompactPeers(peerData []byte) ([]*Peer, error) {
 
 	for i := 0; i < numPeers; i++ {
 		offset := i * peerSize
-		ipBytes := make([]byte, 4)
-		copy(ipBytes, peerData[offset:offset+4])
-		port := binary.BigEndian.Uint16(peerData[offset+4 : offset+6])
-		peers = append(peers, &Peer{IP: net.IP(ipBytes), Port: port})
+
+		peer := &Peer{
+			IP: net.IP(peerData[offset : offset+4]),
+			Port: binary.BigEndian.Uint16(
+				peerData[offset+4 : offset+6],
+			),
+		}
+		peers[i] = peer
 	}
+
 	return peers, nil
 }
 
@@ -325,13 +330,7 @@ func parseDictPeers(peerList []any) ([]*Peer, error) {
 			)
 		}
 
-		peer := &Peer{IP: ip, Port: uint16(portVal)}
-		// Peer ID is optional.
-		if id, ok := peerDict[keyPeerID].(string); ok {
-			peer.ID = id
-		}
-
-		peers = append(peers, peer)
+		peers = append(peers, &Peer{IP: ip, Port: uint16(portVal)})
 	}
 	return peers, nil
 }

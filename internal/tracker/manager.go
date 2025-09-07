@@ -60,6 +60,58 @@ type Config struct {
 	StoppedTimeout time.Duration
 }
 
+func DefaultConfig() Config {
+	return Config{
+		NumWant:            100,
+		ScrapeEvery:        0,
+		AnnounceTimeout:    12 * time.Second,
+		MaxBackoff:         15 * time.Minute,
+		InitialBackoff:     10 * time.Second,
+		FallbackInterval:   30 * time.Minute,
+		MinInterval:        0,
+		JitterFraction:     0.10,
+		RespectMinInterval: true,
+		StoppedTimeout:     5 * time.Second,
+	}
+}
+
+func withDefaults(cfg *Config) Config {
+	if cfg == nil {
+		return DefaultConfig()
+	}
+
+	d := DefaultConfig()
+	if cfg.NumWant != 0 {
+		d.NumWant = cfg.NumWant
+	}
+	if cfg.ScrapeEvery != 0 {
+		d.ScrapeEvery = cfg.ScrapeEvery
+	}
+	if cfg.AnnounceTimeout != 0 {
+		d.AnnounceTimeout = cfg.AnnounceTimeout
+	}
+	if cfg.MaxBackoff != 0 {
+		d.MaxBackoff = cfg.MaxBackoff
+	}
+	if cfg.InitialBackoff != 0 {
+		d.InitialBackoff = cfg.InitialBackoff
+	}
+	if cfg.FallbackInterval != 0 {
+		d.FallbackInterval = cfg.FallbackInterval
+	}
+	if cfg.MinInterval != 0 {
+		d.MinInterval = cfg.MinInterval
+	}
+	if cfg.JitterFraction > 0 {
+		d.JitterFraction = cfg.JitterFraction
+	}
+	d.RespectMinInterval = cfg.RespectMinInterval
+	if cfg.StoppedTimeout != 0 {
+		d.StoppedTimeout = cfg.StoppedTimeout
+	}
+	return d
+}
+
 // Manager coordinates all trackers for a torrent.
 // It runs announce/scrape loops, merges peers, and tracks session stats.
 type Manager struct {
@@ -90,16 +142,44 @@ type Manager struct {
 	// closed signals whether the manager has been stopped.
 	// Once true, further announces are suppressed.
 	closed atomic.Bool
+
+	// OnPeers is the function that is called when announce returns peers.
+	OnPeers func(from string, peers []*Peer)
+}
+
+type Identity struct {
+	InfoHash   [sha1.Size]byte
+	PeerID     [sha1.Size]byte
+	Port       uint16
+	Uploaded   uint64
+	Downloaded uint64
+	Left       uint64
+}
+
+type Option func(*Manager)
+
+func WithConfig(cfg Config) Option {
+	return func(m *Manager) { m.cfg = withDefaults(&cfg) }
 }
 
 func NewManager(
-	cfg *Config,
 	announceURLs []string,
-	infoHash, peerID [sha1.Size]byte,
-	port uint16,
-	uploaded, downloaded, left uint64,
+	id Identity,
+	opts ...Option,
 ) *Manager {
-	trackers := make([]Tracker, 0, len(announceURLs))
+	m := &Manager{
+		cfg:      DefaultConfig(),
+		port:     id.Port,
+		infoHash: id.InfoHash,
+		peerID:   id.PeerID,
+		trackers: make([]Tracker, 0, len(announceURLs)),
+	}
+	m.UpdateStats(id.Uploaded, id.Downloaded, id.Left)
+
+	for _, opt := range opts {
+		opt(m)
+	}
+
 	for _, url := range announceURLs {
 		tracker, err := NewTracker(url)
 		if err != nil {
@@ -111,19 +191,15 @@ func NewManager(
 			continue
 		}
 
-		trackers = append(trackers, tracker)
+		m.trackers = append(m.trackers, tracker)
 		slog.Debug("tracker added", slog.String("url", url))
 	}
 
-	normalize(cfg)
-	m := &Manager{
-		trackers: trackers,
-		port:     port,
-		infoHash: infoHash,
-	}
-	m.UpdateStats(uploaded, downloaded, left)
-
 	return m
+}
+
+func (m *Manager) SetOnPeers(cb func(from string, peers []*Peer)) {
+	m.OnPeers = cb
 }
 
 func (m *Manager) UpdateStats(uploaded, downloaded, left uint64) {
@@ -155,7 +231,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		)
 		grp.Go(func() error { return m.runAnnounceLoop(ctx, tracker) })
 
-		if m.cfg.ScrapeEvery > 0 && tracker.SupportScrape() {
+		if m.cfg.ScrapeEvery > 0 && tracker.SupportsScrape() {
 			slog.Debug(
 				"scrape loop starting",
 				slog.String("url", tracker.URL()),
@@ -268,6 +344,8 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 			slog.Int("peers", len(resp.Peers)),
 		)
 
+		m.emitPeers(tracker.URL(), resp.Peers)
+
 		if resp.Interval > 0 {
 			interval = resp.Interval
 		}
@@ -316,31 +394,26 @@ func (m *Manager) sendStopped(ctx context.Context, tracker Tracker) error {
 	return nil
 }
 
-func normalize(cfg *Config) {
-	if cfg.NumWant == 0 {
-		cfg.NumWant = 100
+func (m *Manager) emitPeers(from string, peers []*Peer) {
+	if m.OnPeers == nil || len(peers) == 0 {
+		return
 	}
-	if cfg.FallbackInterval == 0 {
-		cfg.FallbackInterval = 30 * time.Minute
-	}
-	if cfg.MaxBackoff == 0 {
-		cfg.MaxBackoff = 15 * time.Minute
-	}
-	if cfg.InitialBackoff == 0 {
-		cfg.InitialBackoff = 10 * time.Second
-	}
-	if cfg.AnnounceTimeout == 0 {
-		cfg.AnnounceTimeout = 12 * time.Second
-	}
-	if cfg.StoppedTimeout == 0 {
-		cfg.StoppedTimeout = 5 * time.Second
-	}
-	if cfg.JitterFraction <= 0 {
-		cfg.JitterFraction = 0.10
-	}
-	if !cfg.RespectMinInterval {
-		cfg.RespectMinInterval = true
-	}
+
+	snapshot := make([]*Peer, len(peers))
+	copy(snapshot, peers)
+
+	go func(cb func(string, []*Peer), from string, ps []*Peer) {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error(
+					"OnPeers panic recovered",
+					slog.Any("recover", r),
+				)
+			}
+		}()
+
+		cb(from, ps)
+	}(m.OnPeers, from, snapshot)
 }
 
 func jitter(cfg Config, d time.Duration) time.Duration {

@@ -4,22 +4,23 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha1"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 
+	"github.com/prxssh/echo/internal/peer"
 	"github.com/prxssh/echo/internal/tracker"
-	"golang.org/x/sync/errgroup"
 )
 
 type Torrent struct {
-	PeerID     [sha1.Size]byte   `json:"-"`
-	Metainfo   *Metainfo         `json:"metainfo"`
-	Trackers   []tracker.Tracker `json:"-"`
-	Uploaded   uint64            `json:"uploaded"`
-	Downloaded uint64            `json:"downloaded"`
-	Left       uint64            `json:"left"`
+	PeerID         [sha1.Size]byte  `json:"-"`
+	Metainfo       *Metainfo        `json:"metainfo"`
+	TrackerManager *tracker.Manager `json:"-"`
+	Uploaded       uint64           `json:"uploaded"`
+	Downloaded     uint64           `json:"downloaded"`
+	Left           uint64           `json:"left"`
+	mut            sync.RWMutex     `json:"-"`
+	Peers          []*peer.Peer     `json:"peers"`
 }
 
 func ParseTorrent(data []byte) (*Torrent, error) {
@@ -33,57 +34,43 @@ func ParseTorrent(data []byte) (*Torrent, error) {
 		return nil, err
 	}
 
-	trackers, err := initializeTrackers(metainfo.AnnounceURLs)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Torrent{
-		PeerID:   peerID,
-		Metainfo: metainfo,
-		Trackers: trackers,
-		Left:     metainfo.Size,
-	}, nil
-}
-
-func initializeTrackers(announceURLs []string) ([]tracker.Tracker, error) {
-	var (
-		grp      errgroup.Group
-		mut      sync.Mutex
-		trackers []tracker.Tracker
+	trackerManager := tracker.NewManager(
+		metainfo.AnnounceURLs,
+		tracker.Identity{
+			InfoHash: metainfo.Info.Hash,
+			PeerID:   peerID,
+			Port:     6969,
+			Left:     metainfo.Size,
+		},
 	)
 
-	for _, url := range announceURLs {
-		u := url
-		grp.Go(func() error {
-			t, err := tracker.New(url)
-			if err != nil {
-				slog.Warn(
-					"failed to initialize new tracker",
-					slog.String("announceURL", u),
-					slog.String("error", err.Error()),
-				)
-
-				return nil
-			}
-
-			mut.Lock()
-			trackers = append(trackers, t)
-			mut.Unlock()
-
-			return nil
-		})
-
+	torrent := &Torrent{
+		PeerID:         peerID,
+		Metainfo:       metainfo,
+		TrackerManager: trackerManager,
+		Left:           metainfo.Size,
 	}
+	trackerManager.SetOnPeers(torrent.connectRemotePeers)
 
-	if err := grp.Wait(); err != nil {
-		return nil, err
-	}
+	return torrent, nil
+}
 
-	if len(trackers) < 1 {
-		return nil, errors.New("no trackers available")
-	}
-	return trackers, nil
+func (t *Torrent) Start() {
+}
+
+func (t *Torrent) ListPeers() []*peer.Peer {
+	t.mut.RLock()
+	defer t.mut.Unlock()
+
+	return t.Peers
+}
+
+func (t *Torrent) connectRemotePeers(from string, peers []*tracker.Peer) {
+	slog.Debug(
+		"received peers from trackers",
+		slog.String("url", from),
+		slog.Int("lenPeers", len(peers)),
+	)
 }
 
 func generatePeerID() ([sha1.Size]byte, error) {

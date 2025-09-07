@@ -11,8 +11,8 @@ type Bitfield []byte
 
 // New creates a Bitfield capable of holding n bits. The underlying storage
 // is rounded up to the nearest byte.
-func New(n int64) Bitfield {
-	size := int((n + 7) / 8)
+func New(n int) Bitfield {
+	size := (n + 7) / 8
 	if size < 0 {
 		size = 0
 	}

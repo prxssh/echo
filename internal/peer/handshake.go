@@ -61,9 +61,11 @@ func (h *Handshake) Perform(w io.ReadWriter) error {
 	if !bytes.Equal(h.InfoHash[:], res.InfoHash[:]) {
 		return errors.New("handshake: info hash mismatch")
 	}
-	if !bytes.Equal(h.PeerID[:], res.PeerID[:]) {
-		return errors.New("handshake: peer id mismatch")
-	}
+	/*
+		if !bytes.Equal(h.PeerID[:], res.PeerID[:]) {
+			return errors.New("handshake: peer id mismatch")
+		}
+	*/
 
 	return nil
 }
