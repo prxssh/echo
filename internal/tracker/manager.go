@@ -329,7 +329,7 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 }
 
 func (m *Manager) runScrapeLoop(ctx context.Context, tracker Tracker) error {
-	return errors.New("function not implemented")
+	return errors.ErrUnsupported
 }
 
 func (m *Manager) sendStopped(ctx context.Context, tracker Tracker) error {
