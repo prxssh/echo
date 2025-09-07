@@ -17,7 +17,7 @@ import (
 
 // TODO: add metrics and telemetry
 
-// Config tunes how the tracker manager announces and scrapes
+// Config tunes how the tracker Manager announces and scrapes.
 type Config struct {
 	// NumWant is how many peers we ask a tracker for in each announce.
 	// Typical values are 50-200. Too high can flood your peers.
@@ -27,7 +27,7 @@ type Config struct {
 	// tracker supports it). 0 disables scrape.
 	ScrapeEvery time.Duration
 
-	// AnnountTimeout is the per-request timeout for announces
+	// AnnounceTimeout is the per-request timeout for announces.
 	AnnounceTimeout time.Duration
 
 	// MaxBackoff caps the exponential backoff after repeated announce
@@ -35,7 +35,7 @@ type Config struct {
 	MaxBackoff time.Duration
 
 	// InitialBackoff is the starting delay after the first error. Backoff
-	// doubles on each failuer until MaxBackoff.
+	// doubles on each failure until MaxBackoff.
 	InitialBackoff time.Duration
 
 	// FallbackInterval is used if the tracker response omits an interval.
@@ -48,11 +48,11 @@ type Config struct {
 	MinInterval time.Duration
 
 	// JitterFraction adds randomness to all sleeps so we don't sync up with
-	// thousands of otehr clients.
+	// thousands of other clients.
 	JitterFraction float64
 
 	// RespectMinInterval, if true, enforces the tracker's min interval
-	// field. If false, we many announce sooner (not recommended).
+	// field. If false, we may announce sooner (not recommended).
 	RespectMinInterval bool
 
 	// StoppedTimeout is the timeout for sending a "stopped" event when
@@ -60,6 +60,8 @@ type Config struct {
 	StoppedTimeout time.Duration
 }
 
+// DefaultConfig returns a conservative set of defaults for tracker
+// announcements and scrapes, including timeouts, backoff, and jitter.
 func DefaultConfig() Config {
 	return Config{
 		NumWant:            100,
@@ -73,43 +75,6 @@ func DefaultConfig() Config {
 		RespectMinInterval: true,
 		StoppedTimeout:     5 * time.Second,
 	}
-}
-
-func withDefaults(cfg *Config) Config {
-	if cfg == nil {
-		return DefaultConfig()
-	}
-
-	d := DefaultConfig()
-	if cfg.NumWant != 0 {
-		d.NumWant = cfg.NumWant
-	}
-	if cfg.ScrapeEvery != 0 {
-		d.ScrapeEvery = cfg.ScrapeEvery
-	}
-	if cfg.AnnounceTimeout != 0 {
-		d.AnnounceTimeout = cfg.AnnounceTimeout
-	}
-	if cfg.MaxBackoff != 0 {
-		d.MaxBackoff = cfg.MaxBackoff
-	}
-	if cfg.InitialBackoff != 0 {
-		d.InitialBackoff = cfg.InitialBackoff
-	}
-	if cfg.FallbackInterval != 0 {
-		d.FallbackInterval = cfg.FallbackInterval
-	}
-	if cfg.MinInterval != 0 {
-		d.MinInterval = cfg.MinInterval
-	}
-	if cfg.JitterFraction > 0 {
-		d.JitterFraction = cfg.JitterFraction
-	}
-	d.RespectMinInterval = cfg.RespectMinInterval
-	if cfg.StoppedTimeout != 0 {
-		d.StoppedTimeout = cfg.StoppedTimeout
-	}
-	return d
 }
 
 // Manager coordinates all trackers for a torrent.
@@ -156,16 +121,10 @@ type Identity struct {
 	Left       uint64
 }
 
-type Option func(*Manager)
-
-func WithConfig(cfg Config) Option {
-	return func(m *Manager) { m.cfg = withDefaults(&cfg) }
-}
-
 func NewManager(
 	announceURLs []string,
 	id Identity,
-	opts ...Option,
+	cfg *Config,
 ) *Manager {
 	m := &Manager{
 		cfg:      DefaultConfig(),
@@ -174,11 +133,11 @@ func NewManager(
 		peerID:   id.PeerID,
 		trackers: make([]Tracker, 0, len(announceURLs)),
 	}
-	m.UpdateStats(id.Uploaded, id.Downloaded, id.Left)
-
-	for _, opt := range opts {
-		opt(m)
+	if cfg != nil {
+		m.cfg = *cfg
 	}
+
+	m.UpdateStats(id.Uploaded, id.Downloaded, id.Left)
 
 	for _, url := range announceURLs {
 		tracker, err := NewTracker(url)
@@ -202,12 +161,17 @@ func (m *Manager) SetOnPeers(cb func(from string, peers []*Peer)) {
 	m.OnPeers = cb
 }
 
+// UpdateStats atomically updates uploaded, downloaded, and left counters,
+// which are included in subsequent announce requests.
 func (m *Manager) UpdateStats(uploaded, downloaded, left uint64) {
 	m.uploaded.Store(uploaded)
 	m.downloaded.Store(downloaded)
 	m.left.Store(left)
 }
 
+// Start launches per-tracker announce (and optional scrape) loops and blocks
+// until the context is canceled or a fatal error occurs. If no trackers are
+// available, it returns an error.
 func (m *Manager) Start(ctx context.Context) error {
 	if len(m.trackers) == 0 {
 		slog.Warn(
@@ -364,7 +328,6 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 	}
 }
 
-// TODO: implement
 func (m *Manager) runScrapeLoop(ctx context.Context, tracker Tracker) error {
 	return errors.New("function not implemented")
 }

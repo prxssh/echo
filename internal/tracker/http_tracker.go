@@ -25,10 +25,6 @@ type HTTPTrackerClient struct {
 	client      *http.Client
 }
 
-var ErrScrapeNotSupported = errors.New(
-	"tracker: scrape not supported by announce URL",
-)
-
 const (
 	// Query parameters
 	paramInfoHash   = "info_hash"
@@ -110,7 +106,7 @@ func (c *HTTPTrackerClient) Scrape(
 	params *ScrapeParams,
 ) (*ScrapeResponse, error) {
 	if !c.SupportsScrape() {
-		return nil, ErrScrapeNotSupported
+		return nil, errors.New("scrape unsupported")
 	}
 
 	scrapeURL, err := c.buildScrapeURL(params)

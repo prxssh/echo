@@ -182,6 +182,8 @@ func NewTracker(announceURL string) (Tracker, error) {
 	switch url.Scheme {
 	case "http", "https":
 		return newHTTPTrackerClient(url)
+	case "udp":
+		return newUDPTrackerClient(url)
 	default:
 		return nil, fmt.Errorf(
 			"tracker: unsupported schema %q",

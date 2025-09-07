@@ -34,14 +34,16 @@ func ParseTorrent(data []byte) (*Torrent, error) {
 		return nil, err
 	}
 
+	trackerOpts := tracker.Identity{
+		InfoHash: metainfo.Info.Hash,
+		PeerID:   peerID,
+		Port:     6969,
+		Left:     metainfo.Size,
+	}
 	trackerManager := tracker.NewManager(
 		metainfo.AnnounceURLs,
-		tracker.Identity{
-			InfoHash: metainfo.Info.Hash,
-			PeerID:   peerID,
-			Port:     6969,
-			Left:     metainfo.Size,
-		},
+		trackerOpts,
+		nil,
 	)
 
 	torrent := &Torrent{
