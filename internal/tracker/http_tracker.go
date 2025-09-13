@@ -261,27 +261,24 @@ func parsePeers(data map[string]any) ([]*Peer, error) {
 
 // parseCompactPeers parses the compact peer list format (6 bytes per peer).
 func parseCompactPeers(peerData []byte) ([]*Peer, error) {
-	peerSize := 6 // 4 bytes for IP, 2 for port.
+	const peerSize = 6 // 4 bytes for IP, 2 for port.
 	if len(peerData)%peerSize != 0 {
 		return nil, fmt.Errorf(
-			"invalid compact peer list length: %d",
+			"invalid compact peer len=%d",
 			len(peerData),
 		)
 	}
-
 	numPeers := len(peerData) / peerSize
 	peers := make([]*Peer, 0, numPeers)
 
 	for i := 0; i < numPeers; i++ {
 		offset := i * peerSize
-
-		peer := &Peer{
+		peers = append(peers, &Peer{
 			IP: net.IP(peerData[offset : offset+4]),
 			Port: binary.BigEndian.Uint16(
 				peerData[offset+4 : offset+6],
 			),
-		}
-		peers[i] = peer
+		})
 	}
 
 	return peers, nil

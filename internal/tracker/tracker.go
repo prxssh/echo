@@ -62,7 +62,7 @@ type AnnounceParams struct {
 
 	// NumWant is the desired number of peers the client would like to
 	// receive. Trackers may ignore this or cap the value.
-	NumWant int32
+	NumWant uint32
 
 	// Key is an optional client-generated key to allow the tracker to match
 	// future announces from the same client.
@@ -147,7 +147,7 @@ type ScrapeStats struct {
 	Name string
 }
 
-type Event uint8
+type Event uint32
 
 const (
 	EventNone Event = iota
