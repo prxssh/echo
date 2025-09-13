@@ -104,7 +104,7 @@ const (
 	FileModeMultiple FileMode = "multiple"
 )
 
-func parseMetainfo(r io.Reader) (*Metainfo, error) {
+func ParseMetainfo(r io.Reader) (*Metainfo, error) {
 	p, err := newParser(r)
 	if err != nil {
 		return nil, err

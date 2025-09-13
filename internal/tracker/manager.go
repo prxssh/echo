@@ -15,8 +15,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// TODO: add metrics and telemetry
-
 // Config tunes how the tracker Manager announces and scrapes.
 type Config struct {
 	// NumWant is how many peers we ask a tracker for in each announce.
@@ -62,7 +60,7 @@ type Config struct {
 
 // DefaultConfig returns a conservative set of defaults for tracker
 // announcements and scrapes, including timeouts, backoff, and jitter.
-func DefaultConfig() Config {
+func defaultConfig() Config {
 	return Config{
 		NumWant:            100,
 		ScrapeEvery:        0,
@@ -76,6 +74,10 @@ func DefaultConfig() Config {
 		StoppedTimeout:     5 * time.Second,
 	}
 }
+
+// Represents the function which is called when peers are received from the
+// tracker.
+type OnPeersFunc func(from string, peers []*Peer)
 
 // Manager coordinates all trackers for a torrent.
 // It runs announce/scrape loops, merges peers, and tracks session stats.
@@ -109,35 +111,31 @@ type Manager struct {
 	closed atomic.Bool
 
 	// OnPeers is the function that is called when announce returns peers.
-	OnPeers func(from string, peers []*Peer)
+	OnPeers OnPeersFunc
 }
 
-type Identity struct {
+type Opts struct {
 	InfoHash   [sha1.Size]byte
 	PeerID     [sha1.Size]byte
 	Port       uint16
 	Uploaded   uint64
 	Downloaded uint64
 	Left       uint64
+	Cfg        *Config
 }
 
-func NewManager(
-	announceURLs []string,
-	id Identity,
-	cfg *Config,
-) *Manager {
+func NewManager(announceURLs []string, opts Opts) *Manager {
 	m := &Manager{
-		cfg:      DefaultConfig(),
-		port:     id.Port,
-		infoHash: id.InfoHash,
-		peerID:   id.PeerID,
+		cfg:      defaultConfig(),
+		port:     opts.Port,
+		infoHash: opts.InfoHash,
+		peerID:   opts.PeerID,
 		trackers: make([]Tracker, 0, len(announceURLs)),
 	}
-	if cfg != nil {
-		m.cfg = *cfg
+	if opts.Cfg != nil {
+		m.cfg = *opts.Cfg
 	}
-
-	m.UpdateStats(id.Uploaded, id.Downloaded, id.Left)
+	m.UpdateStats(opts.Uploaded, opts.Downloaded, opts.Left)
 
 	for _, url := range announceURLs {
 		tracker, err := NewTracker(url)
@@ -206,18 +204,14 @@ func (m *Manager) Start(ctx context.Context) error {
 			)
 		}
 	}
-
 	err := grp.Wait()
-	m.closed.Store(true)
-
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil {
 		slog.Error(
 			"tracker manager exited with error",
 			slog.String("error", err.Error()),
 		)
-	} else {
-		slog.Debug("tracker manager stopped")
 	}
+	m.closed.Store(true)
 
 	return err
 }
@@ -229,8 +223,9 @@ func (m *Manager) Stop(ctx context.Context) {
 
 	var wg sync.WaitGroup
 	for _, tracker := range m.trackers {
+		tr := tracker
 		wg.Go(func() {
-			if err := m.sendStopped(ctx, tracker); err != nil {
+			if err := m.sendStopped(ctx, tr); err != nil {
 				slog.Error(
 					"failed to send stopped event to tracker",
 					slog.String("url", tracker.URL()),
@@ -238,11 +233,6 @@ func (m *Manager) Stop(ctx context.Context) {
 				)
 				return
 			}
-
-			slog.Debug(
-				"stopped event sent",
-				slog.String("url", tracker.URL()),
-			)
 		})
 	}
 	wg.Wait()
@@ -271,7 +261,7 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 		}
 
 		slog.Debug(
-			"announce attempt",
+			"preparing tracker announce",
 			slog.String("url", tracker.URL()),
 			slog.String("event", string(req.Event)),
 			slog.Int64("numwant", int64(req.NumWant)),
@@ -288,7 +278,7 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 			slog.Warn(
 				"announce failed",
 				slog.String("url", tracker.URL()),
-				slog.String("erorr", err.Error()),
+				slog.String("error", err.Error()),
 			)
 
 			backoff = time.Duration(
@@ -297,18 +287,24 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 					float64(m.cfg.MaxBackoff),
 				),
 			)
+			if err := sleepCtx(ctx, jitter(m.cfg, backoff)); err != nil {
+				_ = m.sendStopped(ctx, tracker)
+				return err
+			}
+
 			event = EventNone
 			continue
 		}
 
 		slog.Debug(
-			"announce success",
+			"announce successful",
 			slog.String("url", tracker.URL()),
 			slog.Any("interval", resp.MinInterval),
 			slog.Int("peers", len(resp.Peers)),
 		)
 
 		m.emitPeers(tracker.URL(), resp.Peers)
+		backoff = m.cfg.InitialBackoff
 
 		if resp.Interval > 0 {
 			interval = resp.Interval
@@ -318,8 +314,7 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 			interval < resp.MinInterval {
 			next = resp.MinInterval
 		}
-
-		if err := sleepCtx(ctx, next); err != nil {
+		if err := sleepCtx(ctx, jitter(m.cfg, next)); err != nil {
 			_ = m.sendStopped(ctx, tracker)
 			return err
 		}

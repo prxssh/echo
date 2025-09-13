@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha1"
-	"fmt"
 	"log/slog"
-	"sync"
 
-	"github.com/prxssh/echo/internal/peer"
 	"github.com/prxssh/echo/internal/tracker"
 )
 
@@ -19,8 +16,6 @@ type Torrent struct {
 	Uploaded       uint64           `json:"uploaded"`
 	Downloaded     uint64           `json:"downloaded"`
 	Left           uint64           `json:"left"`
-	mut            sync.RWMutex     `json:"-"`
-	Peers          []*peer.Peer     `json:"peers"`
 }
 
 func ParseTorrent(data []byte) (*Torrent, error) {
@@ -29,21 +24,19 @@ func ParseTorrent(data []byte) (*Torrent, error) {
 		return nil, err
 	}
 
-	metainfo, err := parseMetainfo(bytes.NewReader(data))
+	metainfo, err := ParseMetainfo(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 
-	trackerOpts := tracker.Identity{
-		InfoHash: metainfo.Info.Hash,
-		PeerID:   peerID,
-		Port:     6969,
-		Left:     metainfo.Size,
-	}
 	trackerManager := tracker.NewManager(
 		metainfo.AnnounceURLs,
-		trackerOpts,
-		nil,
+		tracker.Opts{
+			InfoHash: metainfo.Info.Hash,
+			PeerID:   peerID,
+			Port:     6969,
+			Left:     metainfo.Size,
+		},
 	)
 
 	torrent := &Torrent{
@@ -58,13 +51,6 @@ func ParseTorrent(data []byte) (*Torrent, error) {
 }
 
 func (t *Torrent) Start() {
-}
-
-func (t *Torrent) ListPeers() []*peer.Peer {
-	t.mut.RLock()
-	defer t.mut.Unlock()
-
-	return t.Peers
 }
 
 func (t *Torrent) connectRemotePeers(from string, peers []*tracker.Peer) {
@@ -82,7 +68,7 @@ func generatePeerID() ([sha1.Size]byte, error) {
 	copy(peerID[:], prefix)
 
 	if _, err := rand.Read(peerID[len(prefix):]); err != nil {
-		return [sha1.Size]byte{}, fmt.Errorf("rand.Read: %w", err)
+		return [sha1.Size]byte{}, err
 	}
 
 	return peerID, nil
