@@ -12,14 +12,14 @@
 
 .title {
     margin: 0 0 var(--space-2);
-    font-size: 28px;
+    font-size: var(--font-size-display);
     font-weight: 600;
 }
 
 .subtitle {
     margin: 0;
     opacity: 0.75;
-    font-size: 14px;
+    font-size: var(--font-size-md);
 }
 
 .content {
@@ -44,7 +44,8 @@
 
 /* Ensure no horizontal scroll */
 .page {
-    overflow-x: hidden;
+    /* Allow horizontal overflow within inner wrappers like tracker tables */
+    overflow-x: visible;
 }
 
 .card {
@@ -57,7 +58,7 @@
 
 .card-title {
     margin: 0 0 var(--space-1);
-    font-size: 16px;
+    font-size: var(--font-size-lg);
 }
 
 .card-header {
@@ -79,7 +80,7 @@
 .card-desc {
     margin: 0 0 var(--space-3);
     opacity: 0.75;
-    font-size: 13px;
+    font-size: var(--font-size-sm);
 }
 
 .footer {
@@ -89,7 +90,7 @@
 
 .muted {
     opacity: 0.7;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
 }
 
 /* Torrent uploader */
@@ -219,7 +220,7 @@
 
 .torrent-sub {
     opacity: 0.75;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     display: flex;
     gap: var(--space-2);
 }
@@ -227,7 +228,7 @@
 .torrent-meta {
     opacity: 0.65;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--font-size-xs);
 }
 
 .torrent-summary {
@@ -270,11 +271,11 @@
 }
 .kv-item .label {
     opacity: 0.7;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     margin-bottom: 6px;
 }
 .kv-item .value {
-    font-size: 14px;
+    font-size: var(--font-size-md);
 }
 
 /* Details panel */
@@ -307,7 +308,7 @@
     border: none;
     margin-right: var(--space-2);
     cursor: pointer;
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     line-height: 1;
     opacity: 0.7;
 }
@@ -323,7 +324,7 @@
 }
 .label {
     opacity: 0.7;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     margin-bottom: var(--space-1);
 }
 .mono {
@@ -390,11 +391,11 @@
 }
 .metric-label {
     opacity: 0.7;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     margin-bottom: var(--space-1);
 }
 .metric-value {
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
 }
 .badge {
@@ -403,7 +404,7 @@
     height: var(--control-h);
     padding: 0 var(--space-2);
     border-radius: var(--radius-1);
-    font-size: 12px;
+    font-size: var(--font-size-xs);
 }
 .badge-ok {
     background: rgba(80, 200, 120, 0.18);
@@ -497,7 +498,7 @@
 .table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: var(--font-size-sm);
 }
 .table thead th {
     text-align: left;
@@ -506,6 +507,11 @@
     white-space: nowrap;
     opacity: 0.85;
     font-weight: 600;
+    position: sticky;
+    top: 0;
+    background: var(--color-bg);
+    z-index: 1;
+    box-shadow: 0 1px 0 0 var(--color-border);
 }
 .table tbody td {
     padding: var(--space-2) var(--space-3);
@@ -517,6 +523,7 @@
 }
 .row-selected {
     background: var(--color-surface-strong);
+    box-shadow: inset 2px 0 0 var(--color-accent);
 }
 .table .mono {
     font-family: var(--font-mono);
@@ -531,7 +538,8 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    padding: 0;
+    padding: var(--control-py) var(--space-1);
+    min-height: var(--control-h);
     cursor: pointer;
 }
 .sort-btn:focus-visible {
@@ -541,11 +549,20 @@
 }
 .sort-indicator {
     opacity: 0.45;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
+    display: inline-block;
+    width: 1em;
+    text-align: center;
 }
 .sort-indicator.active,
 .sort-btn:hover .sort-indicator {
     opacity: 0.85;
+}
+
+/* Keyboard focus on rows */
+.table tbody tr:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
 }
 
 /* Pagination */
@@ -562,7 +579,7 @@
 }
 .pager-info {
     opacity: 0.7;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
 }
 
 /* Tabs for details */
@@ -570,6 +587,14 @@
     display: flex;
     gap: 8px;
     margin-bottom: 10px;
+}
+.tabs.align-with-name {
+    padding-left: var(--name-leading-offset);
+}
+
+/* Utility to align section headings with the table Name column */
+.align-with-name {
+    padding-left: var(--name-leading-offset);
 }
 .tab {
     background: transparent;
@@ -580,7 +605,7 @@
     align-items: center;
     min-height: var(--control-h);
     padding: var(--control-py) var(--control-px);
-    font-size: 13px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
 }
 .tab:focus-visible {
@@ -602,7 +627,7 @@
     border-radius: var(--radius-1);
     outline: none;
     width: 160px;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     transition:
         border-color var(--motion-fast) ease,
         background-color var(--motion-fast) ease;
@@ -627,7 +652,7 @@
     align-items: center;
     height: var(--control-h);
     padding: var(--control-py) var(--control-px);
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     border-radius: 5px;
     box-sizing: border-box;
 }
@@ -644,6 +669,10 @@
         flex-wrap: wrap;
         gap: var(--space-1);
     }
+    .tabs.align-with-name,
+    .align-with-name {
+        padding-left: 0;
+    }
     .toolbar {
         flex-direction: column;
         align-items: stretch;
@@ -655,19 +684,19 @@
     .input {
         width: 100%;
     }
-    /* Hide Pieces and Piece Size columns */
-    .table thead th:nth-child(3),
-    .table tbody td:nth-child(3),
-    .table thead th:nth-child(4),
-    .table tbody td:nth-child(4) {
+    /* Hide Pieces and Piece Size columns - only for torrent list table */
+    .torrent-table thead th:nth-child(3),
+    .torrent-table tbody td:nth-child(3),
+    .torrent-table thead th:nth-child(4),
+    .torrent-table tbody td:nth-child(4) {
         display: none;
     }
 }
 
 @media (max-width: 520px) {
     /* Hide Hash column */
-    .table thead th:nth-child(5),
-    .table tbody td:nth-child(5) {
+    .torrent-table thead th:nth-child(5),
+    .torrent-table tbody td:nth-child(5) {
         display: none;
     }
     /* Trackers rows stack neatly */
@@ -728,7 +757,7 @@
     border: 1px solid var(--color-border-weak);
     border-radius: var(--radius-1);
     padding: 2px 6px;
-    font-size: 12px;
+    font-size: var(--font-size-xs);
 }
 .tracker-row {
     display: grid;
@@ -738,7 +767,7 @@
 }
 .btn-xs {
     padding: var(--control-py) var(--control-px);
-    font-size: 12px;
+    font-size: var(--font-size-xs);
     border-radius: var(--radius-1);
 }
 .proto-pill {
@@ -746,13 +775,13 @@
     border: 1px solid var(--color-border-weak);
     border-radius: 999px;
     padding: var(--control-py) var(--control-px);
-    font-size: 11px;
+    font-size: var(--font-size-xs);
 }
 
 /* Responsive scale up: typography & controls for fullscreen */
 @media (min-width: 1440px) {
     .tab {
-        font-size: 14px;
+        font-size: var(--font-size-md);
     }
     :root {
         --control-h: 32px;
@@ -760,16 +789,16 @@
         --control-px: 10px;
     }
     body {
-        font-size: 15px;
+        font-size: var(--font-size-md-plus);
     }
     .table {
-        font-size: 14px;
+        font-size: var(--font-size-md);
     }
     .metric-value {
-        font-size: 18px;
+        font-size: var(--font-size-xl);
     }
     .kv-item .value {
-        font-size: 15px;
+        font-size: var(--font-size-md-plus);
     }
     .tab {
         padding: 8px 12px;
@@ -778,7 +807,7 @@
 
 @media (min-width: 1920px) {
     .tab {
-        font-size: 15px;
+        font-size: var(--font-size-md-plus);
     }
     :root {
         --control-h: 36px;
@@ -786,16 +815,16 @@
         --control-px: 12px;
     }
     body {
-        font-size: 16px;
+        font-size: var(--font-size-lg);
     }
     .table {
-        font-size: 15px;
+        font-size: var(--font-size-md-plus);
     }
     .metric-value {
-        font-size: 20px;
+        font-size: var(--font-size-2xl);
     }
     .kv-item .value {
-        font-size: 16px;
+        font-size: var(--font-size-lg);
     }
     .tab {
         padding: 10px 14px;

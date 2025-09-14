@@ -52,7 +52,7 @@ const (
 	keyPeerPort      = "port"
 )
 
-func newHTTPTrackerClient(u *url.URL) (*HTTPTrackerClient, error) {
+func NewHTTPTrackerClient(u *url.URL) (*HTTPTrackerClient, error) {
 	transport := &http.Transport{
 		MaxIdleConns:        100,
 		IdleConnTimeout:     30 * time.Second,
@@ -281,7 +281,7 @@ func parseCompactPeers(b []byte, ipv6 bool) ([]*Peer, error) {
 	n := len(b) / stride
 	peers := make([]*Peer, 0, n)
 	for i := 0; i < n; i++ {
-		var peer *Peer
+		var peer Peer
 		offset := i * stride
 
 		if ipv6 {
@@ -294,7 +294,7 @@ func parseCompactPeers(b []byte, ipv6 bool) ([]*Peer, error) {
 			peer.Port = binary.BigEndian.Uint16(b[offset+4 : offset+6])
 
 		}
-		peers = append(peers, peer)
+		peers = append(peers, &peer)
 	}
 
 	return peers, nil

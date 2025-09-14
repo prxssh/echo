@@ -39,7 +39,7 @@ type PeerOpts struct {
 	// PeerID is our 20-byte peer identifier.
 	PeerID [sha1.Size]byte
 	// Pieces is the number of pieces in the torrent.
-	Pieces int64
+	Pieces int
 }
 
 // defaultTimeout is the connection and handshake timeout.
@@ -59,7 +59,7 @@ func ConnectRemotePeers(
 		wg.Go(func() {
 			addr := fmt.Sprintf(
 				"%s:%d",
-				trackerPeer.ID,
+				trackerPeer.IP,
 				trackerPeer.Port,
 			)
 			conn, err := net.DialTimeout(

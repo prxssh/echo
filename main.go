@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log/slog"
 	"os"
@@ -26,11 +27,17 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		Bind:             []interface{}{app},
+		OnStartup: func(ctx context.Context) {
+			app.Startup(ctx)
+		},
+		Bind:             []any{app},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 	})
 	if err != nil {
-		slog.Error("failed to start wails", slog.Any("error", err))
+		slog.Error(
+			"failed to start wails",
+			slog.String("error", err.Error()),
+		)
 		os.Exit(1)
 	}
 }

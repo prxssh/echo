@@ -16,6 +16,7 @@ type UDPTrackerClient struct {
 	connectionID    uint64
 	connectionIDTTL time.Time
 	isIPV6          bool
+	announceURL     string
 }
 
 const (
@@ -38,8 +39,8 @@ var (
 	errTransactionIDMismatch = errors.New("transaction id mismatch")
 )
 
-func NewUDPTrackerClient(url *url.URL) (*UDPTrackerClient, error) {
-	addr, err := net.ResolveUDPAddr("udp", url.Host)
+func NewUDPTrackerClient(u *url.URL) (*UDPTrackerClient, error) {
+	addr, err := net.ResolveUDPAddr("udp", u.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +58,10 @@ func NewUDPTrackerClient(url *url.URL) (*UDPTrackerClient, error) {
 	}
 
 	return &UDPTrackerClient{
-		conn:   conn,
-		key:    key,
-		isIPV6: addr.IP.To4() == nil,
+		conn:        conn,
+		key:         key,
+		isIPV6:      addr.IP.To4() == nil,
+		announceURL: u.String(),
 	}, nil
 }
 
@@ -69,7 +71,7 @@ func (c *UDPTrackerClient) Close() error {
 }
 
 func (c *UDPTrackerClient) URL() string {
-	return c.conn.RemoteAddr().String()
+	return c.announceURL
 }
 
 func (c *UDPTrackerClient) SupportsScrape() bool {
@@ -243,7 +245,7 @@ func (c *UDPTrackerClient) readAnnouncePacket(
 
 	peers := make([]*Peer, 0, len(body)/stride)
 	for i := 0; i+stride <= len(body); i += stride {
-		var peer *Peer
+		var peer Peer
 
 		if c.isIPV6 {
 			peer.IP = net.IP(body[i : i+16])
@@ -253,11 +255,12 @@ func (c *UDPTrackerClient) readAnnouncePacket(
 			peer.Port = binary.BigEndian.Uint16(body[i+4 : i+6])
 		}
 
-		peers = append(peers, peer)
+		peers = append(peers, &peer)
 	}
 
 	return &AnnounceResponse{
-		Interval: time.Duration(interval),
+		// UDP interval is specified in seconds
+		Interval: time.Duration(interval) * time.Second,
 		Leechers: leechers,
 		Seeders:  seeders,
 		Peers:    peers,

@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -19,7 +20,7 @@ import (
 type Config struct {
 	// NumWant is how many peers we ask a tracker for in each announce.
 	// Typical values are 50-200. Too high can flood your peers.
-	NumWant int32
+	NumWant uint32
 
 	// ScrapeEvery controls how often we perform a scrape request (if the
 	// tracker supports it). 0 disables scrape.
@@ -155,8 +156,8 @@ func NewManager(announceURLs []string, opts Opts) *Manager {
 	return m
 }
 
-func (m *Manager) SetOnPeers(cb func(from string, peers []*Peer)) {
-	m.OnPeers = cb
+func (m *Manager) SetOnPeers(callback OnPeersFunc) {
+	m.OnPeers = callback
 }
 
 // UpdateStats atomically updates uploaded, downloaded, and left counters,
@@ -187,21 +188,24 @@ func (m *Manager) Start(ctx context.Context) error {
 	for _, tracker := range m.trackers {
 		tracker := tracker
 
-		slog.Debug(
-			"announce loop starting",
-			slog.String("url", tracker.URL()),
-		)
-		grp.Go(func() error { return m.runAnnounceLoop(ctx, tracker) })
-
-		if m.cfg.ScrapeEvery > 0 && tracker.SupportsScrape() {
+		grp.Go(func() error {
 			slog.Debug(
-				"scrape loop starting",
+				"announce loop starting",
 				slog.String("url", tracker.URL()),
 			)
 
-			grp.Go(
-				func() error { return m.runScrapeLoop(ctx, tracker) },
-			)
+			return m.runAnnounceLoop(ctx, tracker)
+		})
+
+		if m.cfg.ScrapeEvery > 0 && tracker.SupportsScrape() {
+			grp.Go(func() error {
+				slog.Debug(
+					"scrape loop starting",
+					slog.String("url", tracker.URL()),
+				)
+
+				return m.runScrapeLoop(ctx, tracker)
+			})
 		}
 	}
 	err := grp.Wait()
@@ -225,14 +229,7 @@ func (m *Manager) Stop(ctx context.Context) {
 	for _, tracker := range m.trackers {
 		tr := tracker
 		wg.Go(func() {
-			if err := m.sendStopped(ctx, tr); err != nil {
-				slog.Error(
-					"failed to send stopped event to tracker",
-					slog.String("url", tracker.URL()),
-					slog.String("error", err.Error()),
-				)
-				return
-			}
+			_ = m.sendStopped(context.Background(), tr)
 		})
 	}
 	wg.Wait()
@@ -240,7 +237,7 @@ func (m *Manager) Stop(ctx context.Context) {
 }
 
 func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
-	event := EventStarted
+	startedSent, completedSent := false, false
 	interval := m.cfg.FallbackInterval
 	backoff := m.cfg.InitialBackoff
 
@@ -253,17 +250,20 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 			Downloaded: m.downloaded.Load(),
 			Left:       m.left.Load(),
 			NumWant:    m.cfg.NumWant,
-			Event:      event,
 		}
-		if req.Left == 0 && event != EventCompleted {
-			event = EventCompleted
+		switch {
+		case !startedSent:
+			req.Event = EventStarted
+		case req.Left == 0 && !completedSent:
 			req.Event = EventCompleted
+		default:
+			req.Event = EventNone
 		}
 
 		slog.Debug(
-			"preparing tracker announce",
+			"tracker announce",
 			slog.String("url", tracker.URL()),
-			slog.String("event", string(req.Event)),
+			slog.String("event", req.Event.String()),
 			slog.Int64("numwant", int64(req.NumWant)),
 		)
 
@@ -273,7 +273,6 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 		)
 		resp, err := tracker.Announce(callCtx, req)
 		cancel()
-
 		if err != nil {
 			slog.Warn(
 				"announce failed",
@@ -288,20 +287,33 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 				),
 			)
 			if err := sleepCtx(ctx, jitter(m.cfg, backoff)); err != nil {
-				_ = m.sendStopped(ctx, tracker)
+				_ = m.sendStopped(context.Background(), tracker)
 				return err
 			}
-
-			event = EventNone
 			continue
 		}
 
 		slog.Debug(
 			"announce successful",
 			slog.String("url", tracker.URL()),
-			slog.Any("interval", resp.MinInterval),
-			slog.Int("peers", len(resp.Peers)),
+			slog.Any("interval", resp.Interval),
+			slog.Any("peers", len(resp.Peers)),
 		)
+
+		if req.Event == EventStarted {
+			startedSent = true
+		}
+		if req.Event == EventCompleted {
+			completedSent = true
+		}
+
+		runtime.EventsEmit(ctx, "tracker:announce", map[string]any{
+			"tracker":    tracker.URL(),
+			"seeders":    resp.Seeders,
+			"leechers":   resp.Leechers,
+			"interval":   resp.Interval,
+			"peersCount": len(resp.Peers),
+		})
 
 		m.emitPeers(tracker.URL(), resp.Peers)
 		backoff = m.cfg.InitialBackoff
@@ -311,20 +323,28 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 		}
 		next := interval
 		if m.cfg.RespectMinInterval && resp.MinInterval > 0 &&
-			interval < resp.MinInterval {
+			next < resp.MinInterval {
 			next = resp.MinInterval
 		}
 		if err := sleepCtx(ctx, jitter(m.cfg, next)); err != nil {
-			_ = m.sendStopped(ctx, tracker)
+			_ = m.sendStopped(context.Background(), tracker)
 			return err
 		}
-
-		event = EventNone
 	}
 }
 
 func (m *Manager) runScrapeLoop(ctx context.Context, tracker Tracker) error {
-	return errors.ErrUnsupported
+	t := time.NewTicker(m.cfg.ScrapeEvery)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+			// TODO: implement scrape
+		}
+	}
 }
 
 func (m *Manager) sendStopped(ctx context.Context, tracker Tracker) error {
@@ -353,14 +373,21 @@ func (m *Manager) sendStopped(ctx context.Context, tracker Tracker) error {
 }
 
 func (m *Manager) emitPeers(from string, peers []*Peer) {
-	if m.OnPeers == nil || len(peers) == 0 {
+	if m.OnPeers == nil {
+		slog.Warn(
+			"emit peers callback undefined",
+			slog.String("tracker", from),
+		)
+		return
+	}
+	if len(peers) == 0 {
 		return
 	}
 
 	snapshot := make([]*Peer, len(peers))
 	copy(snapshot, peers)
 
-	go func(cb func(string, []*Peer), from string, ps []*Peer) {
+	go func(callback OnPeersFunc, src string, ps []*Peer) {
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error(
@@ -370,7 +397,7 @@ func (m *Manager) emitPeers(from string, peers []*Peer) {
 			}
 		}()
 
-		cb(from, ps)
+		callback(from, ps)
 	}(m.OnPeers, from, snapshot)
 }
 

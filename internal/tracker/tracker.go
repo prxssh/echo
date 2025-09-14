@@ -77,36 +77,36 @@ type AnnounceParams struct {
 type AnnounceResponse struct {
 	// TrackerID is an opaque identifier to be echoed back in future
 	// announces.
-	TrackerID string
+	TrackerID string `json:"-"`
 
 	// Interval is the recommended delay before the next regular announce.
 	// Trackers specify this value in seconds; it is represented here as a
 	// time.Duration for convenience.
-	Interval time.Duration
+	Interval time.Duration `json:"interval"`
 
 	// MinInterval, if non-zero, is the minimum allowed delay between
 	// announces. Also provided in seconds by trackers; represented as a
 	// time.Duration.
-	MinInterval time.Duration
+	MinInterval time.Duration `json:"minInterval"`
 
 	// Leechers is the number of non-seeding peers known to the tracker.
-	Leechers uint32
+	Leechers uint32 `json:"leechers"`
 
 	// Seeders is the number of seeding peers known to the tracker.
-	Seeders uint32
+	Seeders uint32 `json:"seeders"`
 
 	// Peers is the set of peer candidates returned by the tracker.
 	// Implementations may populate from compact or non-compact responses.
-	Peers []*Peer
+	Peers []*Peer `json:"peers"`
 }
 
 // Peer describes a peer candidate returned by a tracker.
 type Peer struct {
 	// IP is the IPv4 or IPv6 address of the peer.
-	IP net.IP
+	IP net.IP `json:"ip"`
 
 	// Port is the TCP port on which the peer accepts incoming connections.
-	Port uint16
+	Port uint16 `json:"port"`
 }
 
 func (p *Peer) String() string {
@@ -186,9 +186,9 @@ func NewTracker(announceURL string) (Tracker, error) {
 
 	switch url.Scheme {
 	case "http", "https":
-		return newHTTPTrackerClient(url)
+		return NewHTTPTrackerClient(url)
 	case "udp":
-		return newUDPTrackerClient(url)
+		return NewUDPTrackerClient(url)
 	default:
 		return nil, fmt.Errorf(
 			"tracker: unsupported schema %q",

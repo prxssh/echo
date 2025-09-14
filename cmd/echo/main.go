@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"embed"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/prxssh/echo/internal/tracker"
 	"github.com/prxssh/echo/pkg/logging"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -28,7 +28,7 @@ func main() {
 			Assets: assets,
 		},
 		OnStartup: func(ctx context.Context) {
-			fmt.Println("hello")
+			tracker.SetWailsContext(ctx)
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 	})

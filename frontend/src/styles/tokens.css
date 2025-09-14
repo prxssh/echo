@@ -34,14 +34,78 @@
         'Berkeley Mono', SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas,
         'Liberation Mono', 'Courier New', monospace;
 
+    /* Typography scale */
+    --line-height: 1.5;
+    --font-size-2xs: 11px;
+    --font-size-xs: 12px;
+    --font-size-sm: 13px;
+    --font-size-md: 14px; /* base */
+    --font-size-md-plus: 15px;
+    --font-size-lg: 16px;
+    --font-size-xl: 18px;
+    --font-size-2xl: 20px;
+    --font-size-display: 28px;
+
     /* Controls */
     --control-h: 28px; /* Accessible hit target */
     --control-px: 8px;
     --control-py: 4px;
+
+    /* Layout alignment anchors */
+    --name-leading-offset: calc(var(--torrent-col-1, 36px) + var(--space-3));
 }
 
 @media (prefers-reduced-motion: no-preference) {
     :root {
         --motion-fast: 150ms;
     }
+}
+
+/* Light theme overrides */
+:root[data-theme='light'] {
+    /* Color system (light) */
+    --color-bg: #ffffff;
+    --color-surface: rgba(0, 0, 0, 0.03);
+    --color-surface-strong: rgba(0, 0, 0, 0.06);
+    --color-border: rgba(0, 0, 0, 0.16);
+    --color-border-weak: rgba(0, 0, 0, 0.09);
+    --color-text: #0f141a;
+    --color-text-muted: rgba(15, 20, 26, 0.72);
+    --color-accent: #5f85a0; /* tuned to maintain contrast on light */
+}
+
+/* Dark Slate (cool, soft dark) */
+:root[data-theme='dark-slate'] {
+    --color-bg: #0c1118;
+    --color-surface: rgba(255, 255, 255, 0.03);
+    --color-surface-strong: rgba(255, 255, 255, 0.06);
+    --color-border: rgba(255, 255, 255, 0.10);
+    --color-border-weak: rgba(255, 255, 255, 0.06);
+    --color-text: #e6edf3;
+    --color-text-muted: rgba(230, 237, 243, 0.70);
+    --color-accent: #90b4ce;
+}
+
+/* Light Paper (neutral, calm light) */
+:root[data-theme='light-paper'] {
+    --color-bg: #f7f7f8;
+    --color-surface: rgba(0, 0, 0, 0.03);
+    --color-surface-strong: rgba(0, 0, 0, 0.06);
+    --color-border: rgba(0, 0, 0, 0.10);
+    --color-border-weak: rgba(0, 0, 0, 0.06);
+    --color-text: #0f141a;
+    --color-text-muted: rgba(15, 20, 26, 0.70);
+    --color-accent: #3d6ea6;
+}
+
+/* Dark OLED (true black) */
+:root[data-theme='dark-oled'] {
+    --color-bg: #000000;
+    --color-surface: rgba(255, 255, 255, 0.04);
+    --color-surface-strong: rgba(255, 255, 255, 0.07);
+    --color-border: rgba(255, 255, 255, 0.12);
+    --color-border-weak: rgba(255, 255, 255, 0.07);
+    --color-text: #eaeef3;
+    --color-text-muted: rgba(234, 238, 243, 0.70);
+    --color-accent: #8aa3b6;
 }

@@ -6,12 +6,11 @@ import TorrentTable, { SortDir, SortKey } from './components/TorrentTable';
 import { toRow, formatBytes } from './utils/torrent';
 import Pager from './components/Pager';
 import DetailsPanel from './components/DetailsPanel';
-import { ParseTorrent } from '../wailsjs/go/ui/UI';
+import { AddTorrent } from '../wailsjs/go/ui/UI';
+import { EventsOn } from '../wailsjs/runtime';
 import { torrent as Models } from '../wailsjs/go/models';
 import useResponsivePageSize from './hooks/useResponsivePageSize';
 import useFilterSort from './hooks/useFilterSort';
-
-// Using generated types from Wails models (see ../wailsjs/go/models)
 
 function App() {
     const [items, setItems] = useState<Models.Torrent[]>([]);
@@ -28,6 +27,50 @@ function App() {
         () => items.reduce((acc, t) => acc + (t?.metainfo?.size || 0), 0),
         [items]
     );
+
+    // Tracker stats store (keyed by normalized announce URL)
+    type Stat = { seeders: number; leechers: number; intervalSec: number; peersCount: number; at: number };
+    const normalize = (u: string): string => {
+        try {
+            const parsed = new URL(u);
+            const scheme = parsed.protocol.toLowerCase();
+            const host = parsed.host.toLowerCase();
+            let path = parsed.pathname || '';
+            path = path.replace(/\/+$/, '');
+            return `${scheme}//${host}${path}`;
+        } catch {
+            return (u || '').replace(/\/+$/, '');
+        }
+    };
+    const [trackerStats, setTrackerStats] = useState<Record<string, Stat>>({});
+
+    // Global subscription: update tracker stats and log payloads
+    useEffect(() => {
+        const off = EventsOn('tracker:announce', (payload: any) => {
+            try {
+                // eslint-disable-next-line no-console
+                console.log('[wails] tracker:announce', payload);
+                const url = String(payload?.tracker ?? '');
+                if (!url) return;
+                const key = normalize(url);
+                const intervalNs = Number(payload?.interval ?? 0);
+                setTrackerStats((prev) => ({
+                    ...prev,
+                    [key]: {
+                        seeders: Number(payload?.seeders ?? 0),
+                        leechers: Number(payload?.leechers ?? 0),
+                        peersCount: Number(payload?.peersCount ?? 0),
+                        intervalSec: Math.max(0, Math.round(intervalNs / 1e9)),
+                        at: Date.now(),
+                    },
+                }));
+            } catch {}
+        });
+        return () => {
+            if (typeof off === 'function') off();
+        };
+    }, []);
+
 
     const infoHashHex = (t: Models.Torrent): string => {
         const arr = t.metainfo?.info?.infoHash as number[] | undefined;
@@ -46,7 +89,7 @@ function App() {
                 const parsed: Models.Torrent[] = [];
                 for (const f of files) {
                     const buf = new Uint8Array(await f.arrayBuffer());
-                    const info = await ParseTorrent(Array.from(buf));
+                    const info = await AddTorrent(Array.from(buf));
                     parsed.push(info as Models.Torrent);
                 }
 
@@ -215,6 +258,7 @@ function App() {
                                 torrent={sel}
                                 activeTab={activeTab}
                                 onTabChange={setActiveTab}
+                                trackerStats={trackerStats}
                             />
                         );
                     })()}

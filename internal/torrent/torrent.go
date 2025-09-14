@@ -2,9 +2,9 @@ package torrent
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
-	"log/slog"
 
 	"github.com/prxssh/echo/internal/tracker"
 )
@@ -50,15 +50,14 @@ func ParseTorrent(data []byte) (*Torrent, error) {
 	return torrent, nil
 }
 
-func (t *Torrent) Start() {
+func (t *Torrent) Start(ctx context.Context) {
+	go t.TrackerManager.Start(ctx)
+}
+
+func (t *Torrent) Close() {
 }
 
 func (t *Torrent) connectRemotePeers(from string, peers []*tracker.Peer) {
-	slog.Debug(
-		"received peers from trackers",
-		slog.String("url", from),
-		slog.Int("lenPeers", len(peers)),
-	)
 }
 
 func generatePeerID() ([sha1.Size]byte, error) {

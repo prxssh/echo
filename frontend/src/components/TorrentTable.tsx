@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { TorrentRow } from '../utils/torrent';
 
 export type SortKey = 'name' | 'size' | 'pieces' | 'pieceSize';
@@ -25,9 +25,33 @@ export const TorrentTable: React.FC<Props> = ({
 }) => {
     const body = useMemo(() => rows, [rows]);
 
+    const tableRef = useRef<HTMLTableElement | null>(null);
+
+    useEffect(() => {
+        const updateVars = () => {
+            const el = tableRef.current;
+            if (!el || !el.tHead || !el.tHead.rows.length) return;
+            const cells = el.tHead.rows[0].cells;
+            const widths = Array.from(cells).map((c) => c.getBoundingClientRect().width);
+            const root = document.documentElement.style;
+            for (let i = 0; i < widths.length; i++) {
+                root.setProperty(`--torrent-col-${i + 1}`, `${Math.round(widths[i])}px`);
+            }
+        };
+
+        updateVars();
+        const ro = new ResizeObserver(() => updateVars());
+        if (tableRef.current) ro.observe(tableRef.current);
+        window.addEventListener('resize', updateVars);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('resize', updateVars);
+        };
+    }, [rows.length]);
+
     return (
         <div className="table-wrap">
-            <table className="table">
+            <table ref={tableRef} className="table torrent-table">
                 <thead>
                     <tr>
                         <th style={{ width: '36px' }}></th>

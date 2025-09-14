@@ -9,12 +9,14 @@ type Props = {
     torrent: Models.Torrent;
     activeTab: 'general' | 'trackers' | 'files';
     onTabChange: (tab: 'general' | 'trackers' | 'files') => void;
+    trackerStats?: Record<string, { seeders: number; leechers: number; intervalSec: number; peersCount: number; at: number }>;
 };
 
 export const DetailsPanel: React.FC<Props> = ({
     torrent: t,
     activeTab,
     onTabChange,
+    trackerStats,
 }) => {
     const [copied, setCopied] = useState(false);
     const id = infoHashHex(t);
@@ -164,7 +166,7 @@ export const DetailsPanel: React.FC<Props> = ({
             {activeTab === 'trackers' &&
                 (t.metainfo?.announceUrls?.length || 0) > 0 && (
                     <div className="section-block">
-                        <TrackersList urls={t.metainfo?.announceUrls || []} />
+                        <TrackersList urls={t.metainfo?.announceUrls || []} stats={trackerStats || {}} />
                     </div>
                 )}
 
