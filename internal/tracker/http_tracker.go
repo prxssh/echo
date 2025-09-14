@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -18,15 +18,12 @@ import (
 	"github.com/prxssh/echo/internal/bencode"
 )
 
-// HTTPTrackerClient is a Tracker implementation that speaks the HTTP(S)
-// tracker protocol defined in BEP 3 (and commonly used scrape endpoint).
 type HTTPTrackerClient struct {
 	announceURL *url.URL
 	client      *http.Client
 }
 
 const (
-	// Query parameters
 	paramInfoHash   = "info_hash"
 	paramPeerID     = "peer_id"
 	paramPort       = "port"
@@ -38,8 +35,9 @@ const (
 	paramKey        = "key"
 	paramTrackerID  = "trackerid"
 	paramEvent      = "event"
+)
 
-	// Bencode dictionary keys
+const (
 	keyFailureReason = "failure reason"
 	keyWarningMsg    = "warning message"
 	keyInterval      = "interval"
@@ -48,26 +46,48 @@ const (
 	keyComplete      = "complete"
 	keyIncomplete    = "incomplete"
 	keyPeers         = "peers"
+	keyPeers6        = "peers6"
 	keyPeerID        = "peer id"
 	keyPeerIP        = "ip"
 	keyPeerPort      = "port"
 )
 
-// newHTTPTrackerClient creates a new HTTP tracker client for the given announce
-// URL.
 func newHTTPTrackerClient(u *url.URL) (*HTTPTrackerClient, error) {
-	return &HTTPTrackerClient{announceURL: u, client: &http.Client{}}, nil
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		IdleConnTimeout:     30 * time.Second,
+		DisableCompression:  false,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	return &HTTPTrackerClient{
+		announceURL: u,
+		client: &http.Client{
+			Transport: transport,
+			Timeout:   20 * time.Second,
+		},
+	}, nil
 }
 
-func (c *HTTPTrackerClient) URL() string { return c.announceURL.String() }
+func (c *HTTPTrackerClient) URL() string {
+	return c.announceURL.String()
+}
 
-// Announce sends an announce request and parses the response.
+func (c *HTTPTrackerClient) SupportsScrape() bool {
+	seg := path.Base(c.announceURL.Path)
+	return strings.Contains(seg, "announce")
+}
+
 func (c *HTTPTrackerClient) Announce(
 	ctx context.Context,
 	params *AnnounceParams,
 ) (*AnnounceResponse, error) {
-	reqURL := c.buildAnnounceRequest(params)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	announceURL := c.buildAnnounceURL(params)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		announceURL,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -86,27 +106,23 @@ func (c *HTTPTrackerClient) Announce(
 			string(bodyBytes),
 		)
 	}
-
 	return parseAnnounceResponse(resp.Body)
 }
 
-func (c *HTTPTrackerClient) SupportsScrape() bool {
-	path := c.announceURL.Path
-	lastSlash := strings.LastIndex(path, "/")
-	if lastSlash == -1 {
-		return false
-	}
-
-	return strings.HasPrefix(path[lastSlash+1:], "announce")
-}
-
-// Scrape queries the tracker's scrape endpoint for aggregate swarm statistics.
 func (c *HTTPTrackerClient) Scrape(
 	ctx context.Context,
 	params *ScrapeParams,
 ) (*ScrapeResponse, error) {
+	if params == nil || len(params.InfoHashes) == 0 {
+		return &ScrapeResponse{
+			Stats: map[[sha1.Size]byte]ScrapeStats{},
+		}, nil
+	}
 	if !c.SupportsScrape() {
-		return nil, errors.New("scrape unsupported")
+		return nil, fmt.Errorf(
+			"scrape unsupported for %q",
+			c.announceURL,
+		)
 	}
 
 	scrapeURL, err := c.buildScrapeURL(params)
@@ -141,8 +157,7 @@ func (c *HTTPTrackerClient) Scrape(
 	return parseScrapeResponse(resp.Body)
 }
 
-// buildAnnounceRequest creates the full announce URL with query parameters.
-func (c *HTTPTrackerClient) buildAnnounceRequest(
+func (c *HTTPTrackerClient) buildAnnounceURL(
 	params *AnnounceParams,
 ) string {
 	reqURL := *c.announceURL
@@ -174,8 +189,6 @@ func (c *HTTPTrackerClient) buildAnnounceRequest(
 	return reqURL.String()
 }
 
-// parseAnnounceResponse converts a bencoded tracker response into
-// AnnounceResponse.
 func parseAnnounceResponse(r io.Reader) (*AnnounceResponse, error) {
 	raw, err := bencode.NewDecoder(r).Decode()
 	if err != nil {
@@ -184,7 +197,7 @@ func parseAnnounceResponse(r io.Reader) (*AnnounceResponse, error) {
 			err,
 		)
 	}
-	data, ok := raw.(map[string]any)
+	announceDict, ok := raw.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf(
 			"unexpected response type, expected dictionary, got %T",
@@ -192,37 +205,22 @@ func parseAnnounceResponse(r io.Reader) (*AnnounceResponse, error) {
 		)
 	}
 
-	if failure, ok := data[keyFailureReason].(string); ok {
+	if failure, ok := announceDict[keyFailureReason].(string); ok {
 		return nil, fmt.Errorf("tracker error: %s", failure)
 	}
-
-	if warning, ok := data[keyWarningMsg].(string); ok {
-		slog.Warn("Tracker warning", "message", warning)
+	if warning, ok := announceDict[keyWarningMsg].(string); ok {
+		slog.Warn("tracker warning", "message", warning)
 	}
 
-	getInt64 := func(key string) (int64, bool) {
-		val, ok := data[key]
-		if !ok {
-			return 0, false
-		}
-		num, ok := val.(int64)
-		return num, ok
-	}
-
-	interval, ok := getInt64(keyInterval)
+	interval, ok := asInt64(announceDict[keyInterval])
 	if !ok {
-		return nil, fmt.Errorf(
-			"tracker response missing or invalid 'interval'",
-		)
+		return nil, fmt.Errorf("announce: missing 'interval'")
 	}
-
-	// Parse optional fields.
-	minInterval, _ := getInt64(keyMinInterval)
-	complete, _ := getInt64(keyComplete)
-	incomplete, _ := getInt64(keyIncomplete)
-	trackerID, _ := data[keyTrackerID].(string)
-
-	peers, err := parsePeers(data)
+	minInterval, _ := asInt64(announceDict[keyMinInterval])
+	complete, _ := asInt64(announceDict[keyComplete])
+	incomplete, _ := asInt64(announceDict[keyIncomplete])
+	trackerID, _ := announceDict[keyTrackerID].(string)
+	peers, err := parsePeersField(announceDict)
 	if err != nil {
 		return nil, err
 	}
@@ -230,185 +228,195 @@ func parseAnnounceResponse(r io.Reader) (*AnnounceResponse, error) {
 	return &AnnounceResponse{
 		Peers:       peers,
 		TrackerID:   trackerID,
-		Interval:    time.Duration(interval) * time.Second,
 		Seeders:     uint32(complete),
 		Leechers:    uint32(incomplete),
+		Interval:    time.Duration(interval) * time.Second,
 		MinInterval: time.Duration(minInterval) * time.Second,
 	}, nil
 }
 
-// parsePeers decodes either the compact or non-compact peers formats.
-func parsePeers(data map[string]any) ([]*Peer, error) {
-	peersData, ok := data[keyPeers]
-	if !ok {
-		// It's common for trackers to omit the 'peers' key if there are
-		// none.
-		// Return an empty slice instead of an error.
-		return []*Peer{}, nil
+func parsePeersField(d map[string]any) ([]*Peer, error) {
+	var out []*Peer
+
+	if v, ok := d[keyPeers]; ok {
+		ps, err := parsePeersAny(v, false)
+		if err != nil {
+			return nil, fmt.Errorf("parse peers: %w", err)
+		}
+		out = append(out, ps...)
+	}
+	if v6, ok := d[keyPeers6]; ok {
+		ps, err := parsePeersAny(v6, true)
+		if err != nil {
+			return nil, fmt.Errorf("parse peers6: %w", err)
+		}
+		out = append(out, ps...)
 	}
 
-	switch peers := peersData.(type) {
+	return out, nil
+}
+
+func parsePeersAny(v any, ipv6 bool) ([]*Peer, error) {
+	switch t := v.(type) {
 	case string:
-		return parseCompactPeers([]byte(peers))
+		return parseCompactPeers([]byte(t), ipv6)
 	case []byte:
-		return parseCompactPeers(peers)
+		return parseCompactPeers(t, ipv6)
 	case []any:
-		return parseDictPeers(peers)
+		return parseDictPeers(t)
 	default:
-		return nil, fmt.Errorf("invalid 'peers' format: expected string or list, got %T", peersData)
+		return nil, fmt.Errorf("invalid peers type %T", v)
 	}
 }
 
-// parseCompactPeers parses the compact peer list format (6 bytes per peer).
-func parseCompactPeers(peerData []byte) ([]*Peer, error) {
-	const peerSize = 6 // 4 bytes for IP, 2 for port.
-	if len(peerData)%peerSize != 0 {
-		return nil, fmt.Errorf(
-			"invalid compact peer len=%d",
-			len(peerData),
-		)
+func parseCompactPeers(b []byte, ipv6 bool) ([]*Peer, error) {
+	stride := strideIPV4
+	if ipv6 {
+		stride = strideIPV6
 	}
-	numPeers := len(peerData) / peerSize
-	peers := make([]*Peer, 0, numPeers)
+	if len(b)%stride != 0 {
+		b = b[:len(b)/stride*stride]
+	}
 
-	for i := 0; i < numPeers; i++ {
-		offset := i * peerSize
-		peers = append(peers, &Peer{
-			IP: net.IP(peerData[offset : offset+4]),
-			Port: binary.BigEndian.Uint16(
-				peerData[offset+4 : offset+6],
-			),
-		})
+	n := len(b) / stride
+	peers := make([]*Peer, 0, n)
+	for i := 0; i < n; i++ {
+		var peer *Peer
+		offset := i * stride
+
+		if ipv6 {
+			peer.IP = net.IP(b[offset : offset+16])
+			peer.Port = binary.BigEndian.Uint16(
+				b[offset+16 : offset+18],
+			)
+		} else {
+			peer.IP = net.IPv4(b[offset], b[offset+1], b[offset+2], b[offset+3])
+			peer.Port = binary.BigEndian.Uint16(b[offset+4 : offset+6])
+
+		}
+		peers = append(peers, peer)
 	}
 
 	return peers, nil
 }
 
-// parseDictPeers parses the non-compact (dictionary) peer list format.
-func parseDictPeers(peerList []any) ([]*Peer, error) {
-	peers := make([]*Peer, 0, len(peerList))
-
-	for i, item := range peerList {
-		peerDict, ok := item.(map[string]any)
+func parseDictPeers(list []any) ([]*Peer, error) {
+	peers := make([]*Peer, 0, len(list))
+	for i, it := range list {
+		m, ok := it.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf(
-				"invalid peer dictionary entry at index %d: got %T",
-				i,
-				item,
-			)
+			return nil, fmt.Errorf("peer[%d]: not dict (%T)", i, it)
 		}
 
-		ipStr, ok := peerDict[keyPeerIP].(string)
-		if !ok {
-			return nil, fmt.Errorf(
-				"missing or invalid 'ip' in peer entry at index %d",
-				i,
-			)
+		var ip net.IP
+		if s, ok := asString(m[keyPeerIP]); ok {
+			ip = net.ParseIP(s)
+		} else if bs, ok := m[keyPeerIP].([]byte); ok {
+			ip = net.IP(bs)
 		}
-
-		portVal, ok := peerDict[keyPeerPort].(int64)
-		if !ok {
-			return nil, fmt.Errorf(
-				"missing or invalid 'port' in peer entry at index %d",
-				i,
-			)
-		}
-
-		ip := net.ParseIP(ipStr)
 		if ip == nil {
-			return nil, fmt.Errorf(
-				"invalid IP address string '%s' in peer entry at index %d",
-				ipStr,
-				i,
-			)
+			return nil, fmt.Errorf("peer[%d]: invalid ip", i)
 		}
 
-		peers = append(peers, &Peer{IP: ip, Port: uint16(portVal)})
+		port64, ok := asInt64(m[keyPeerPort])
+		if !ok || port64 < 1 || port64 > 65535 {
+			return nil, fmt.Errorf("peer[%d]: invalid port", i)
+		}
+
+		peers = append(peers, &Peer{IP: ip, Port: uint16(port64)})
 	}
+
 	return peers, nil
 }
 
-// buildScrapeURL returns the scrape URL with repeated info_hash parameters.
-// Only trackers whose announce URL ends with a segment containing "announce"
-// are considered to support scrape. Otherwise, ErrScrapeNotSupported is
-// returned.
 func (c *HTTPTrackerClient) buildScrapeURL(
 	params *ScrapeParams,
 ) (string, error) {
 	u := *c.announceURL
-	path := u.Path
+	base := path.Base(u.Path)
+	dir := path.Dir(u.Path)
+	u.Path = path.Join(dir, strings.Replace(base, "announce", "scrape", 1))
 
-	// idx will never be -1 here
-	idx := strings.LastIndex(path, "/")
-	u.Path = path[:idx] + strings.Replace(
-		path[idx+1:],
-		"announce",
-		"scrape",
-		1,
-	)
+	var sb strings.Builder
+	for i, h := range params.InfoHashes {
+		if i > 0 {
+			sb.WriteByte('&')
+		}
 
-	q := u.Query()
-	for _, h := range params.InfoHashes {
-		q.Add(paramInfoHash, string(h[:]))
+		sb.WriteString(paramInfoHash)
+		sb.WriteByte('=')
+		sb.WriteString(string(h[:]))
 	}
-	u.RawQuery = q.Encode()
+	u.RawQuery = sb.String()
 
 	return u.String(), nil
 }
 
-// parseScrapeResponse parses the HTTP scrape response into ScrapeResponse.
 func parseScrapeResponse(r io.Reader) (*ScrapeResponse, error) {
 	decoded, err := bencode.NewDecoder(r).Decode()
 	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to parse scrape response: %w",
-			err,
-		)
+		return nil, fmt.Errorf("decode scrape: %w", err)
 	}
 	root, ok := decoded.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf(
-			"unexpected scrape response type: %T",
-			decoded,
-		)
+		return nil, fmt.Errorf("scrape: not a dict (%T)", decoded)
+	}
+	if failure, ok := asString(root[keyFailureReason]); ok &&
+		failure != "" {
+		return nil, fmt.Errorf("tracker error: %s", failure)
 	}
 
-	files, ok := root["files"].(map[string]any)
-	if !ok {
-		// Some trackers may return empty stats; treat as empty map.
-		return &ScrapeResponse{
-			Stats: map[[sha1.Size]byte]ScrapeStats{},
-		}, nil
-	}
-
+	files, _ := root["files"].(map[string]any)
 	out := make(map[[sha1.Size]byte]ScrapeStats, len(files))
 	for k, v := range files {
 		fdict, ok := v.(map[string]any)
 		if !ok {
 			continue
 		}
+
 		var ih [sha1.Size]byte
 		kb := []byte(k)
 		if len(kb) != sha1.Size {
-			// Skip invalid keys
 			continue
 		}
 		copy(ih[:], kb)
 
 		var s ScrapeStats
-		if n, ok := fdict["complete"].(int64); ok && n >= 0 {
+		if n, ok := asInt64(fdict["complete"]); ok && n >= 0 {
 			s.Seeders = uint32(n)
 		}
-		if n, ok := fdict["incomplete"].(int64); ok && n >= 0 {
+		if n, ok := asInt64(fdict["incomplete"]); ok && n >= 0 {
 			s.Leechers = uint32(n)
 		}
-		if n, ok := fdict["downloaded"].(int64); ok && n >= 0 {
+		if n, ok := asInt64(fdict["downloaded"]); ok && n >= 0 {
 			s.Completed = uint32(n)
 		}
-		if name, ok := fdict["name"].(string); ok {
+		if name, ok := asString(fdict["name"]); ok {
 			s.Name = name
 		}
 		out[ih] = s
 	}
+
 	return &ScrapeResponse{Stats: out}, nil
+}
+
+func asString(v any) (string, bool) {
+	switch t := v.(type) {
+	case string:
+		return t, true
+	case []byte:
+		return string(t), true
+	default:
+		return "", false
+	}
+}
+
+func asInt64(v any) (int64, bool) {
+	switch t := v.(type) {
+	case int64:
+		return t, true
+	case int:
+		return int64(t), true
+	}
+	return 0, false
 }

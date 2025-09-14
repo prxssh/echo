@@ -156,6 +156,11 @@ const (
 	EventCompleted
 )
 
+const (
+	strideIPV4 = 6
+	strideIPV6 = 18
+)
+
 func (e Event) String() string {
 	switch e {
 	case EventNone:

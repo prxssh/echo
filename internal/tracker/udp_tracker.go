@@ -24,8 +24,6 @@ const (
 	connectionIDTTL = 60 * time.Second
 	maxRetries      = 8
 	maxUDPPacket    = 2048
-	strideIPV4      = 6
-	strideIPV6      = 18
 )
 
 const (
@@ -119,8 +117,6 @@ func (c *UDPTrackerClient) Announce(
 		); err != nil {
 			continue
 		}
-		// Read and validate the announce response corresponding to our
-		// transaction id.
 		resp, err := c.readAnnouncePacket(transactionID)
 		if err != nil {
 			// On mismatch, force re-connect next attempt.
