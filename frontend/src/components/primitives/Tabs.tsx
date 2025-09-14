@@ -10,7 +10,7 @@ const TabsCtx = createContext<TabsContextValue | null>(null);
 
 export type TabsRootProps = {
     value: string;
-    onValueChange: (v: string) => void;
+    onValueChange: (v: any) => void;
     children: React.ReactNode;
 };
 

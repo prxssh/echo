@@ -386,7 +386,6 @@ func jitter(cfg Config, d time.Duration) time.Duration {
 	if d <= 0 {
 		d = cfg.FallbackInterval
 	}
-
 	f := cfg.JitterFraction
 	lo, hi := float64(d)*(1.0-f), float64(d)*(1.0+f)
 

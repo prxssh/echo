@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prxssh/echo/internal/ui"
+	"github.com/prxssh/echo/internal/utils"
 	"github.com/prxssh/echo/pkg/logging"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -19,6 +20,18 @@ var assets embed.FS
 
 func main() {
 	setupLogger()
+
+	if err := utils.NewIP2CountryResolver(
+		"./data/dbip-country-ipv4.mmdb",
+		"./data/dbip-country-ipv6.mmdb",
+	); err != nil {
+		slog.Error(
+			"ip2country setup failed",
+			slog.String("error", err.Error()),
+		)
+		os.Exit(1)
+	}
+
 	app := ui.New()
 
 	err := wails.Run(&options.App{

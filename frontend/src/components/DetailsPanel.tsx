@@ -6,17 +6,19 @@ import FileTree from './FileTree';
 import { formatBytes } from '../utils/torrent';
 import TrackersList from './TrackersList';
 import Tabs from './primitives/Tabs';
+import PeersList from './PeersList';
 
 type Props = {
     torrent: Models.Torrent;
-    activeTab: 'general' | 'trackers';
-    onTabChange: (tab: 'general' | 'trackers') => void;
+    activeTab: 'general' | 'trackers' | 'peers';
+    onTabChange: (tab: 'general' | 'trackers' | 'peers') => void;
     trackerStats?: Record<
         string,
         {
             seeders: number;
             leechers: number;
             intervalSec: number;
+            minIntervalSec: number;
             peersCount: number;
             at: number;
         }
@@ -49,6 +51,7 @@ export const DetailsPanel: React.FC<Props> = ({
                 <Tabs.List>
                     <Tabs.Trigger value="general">General</Tabs.Trigger>
                     <Tabs.Trigger value="trackers">Trackers</Tabs.Trigger>
+                    <Tabs.Trigger value="peers">Peers</Tabs.Trigger>
                 </Tabs.List>
 
                 <Tabs.Panel value="general">
@@ -175,6 +178,11 @@ export const DetailsPanel: React.FC<Props> = ({
                             />
                         </div>
                     )}
+                </Tabs.Panel>
+                <Tabs.Panel value="peers">
+                    <div className="section-block">
+                        <PeersList />
+                    </div>
                 </Tabs.Panel>
             </Tabs.Root>
         </div>

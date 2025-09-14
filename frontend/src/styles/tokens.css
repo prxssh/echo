@@ -8,6 +8,12 @@
     --color-text: #e5e9f0;
     --color-text-muted: rgba(229, 233, 240, 0.72);
     --color-accent: #8aa3b6;
+    --color-accent-weak: rgba(138, 163, 182, 0.24);
+    --color-success: #50c878; /* emerald */
+    --color-success-weak: rgba(80, 200, 120, 0.22);
+    /* Semantic (lightweight) */
+    --color-danger: #ff6b6b;
+    --color-danger-weak: rgba(255, 107, 107, 0.22);
 
     /* Spacing scale (8px grid) */
     --space-0: 0;

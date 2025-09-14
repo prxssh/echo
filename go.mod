@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/fatih/color v1.18.0
+	github.com/oschwald/maxminddb-golang v1.13.0
 	github.com/wailsapp/wails/v2 v2.10.2
 	golang.org/x/sync v0.11.0
 )

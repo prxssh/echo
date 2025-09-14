@@ -5,18 +5,13 @@ import (
 	"io"
 )
 
-// Message is a BitTorrent wire message. A nil message represents a keep-alive
-// (length prefix 0). For non-keepalive messages, ID is set and Payload contains
-// the message-specific data.
 type Message struct {
 	ID      MessageID
 	Payload []byte
 }
 
-// MessageID identifies the BitTorrent wire message type.
 type MessageID uint8
 
-// Standard BitTorrent message IDs (BEP 3).
 const (
 	MsgChoke         MessageID = 0
 	MsgUnchoke       MessageID = 1
@@ -29,17 +24,39 @@ const (
 	MsgCancel        MessageID = 8
 )
 
-// Serialize encodes the message to the wire format:
-// <length prefix><message ID><payload>. A nil message returns the
-// 4-byte zero keep-alive frame.
+func (mid MessageID) String() string {
+	switch mid {
+	case MsgChoke:
+		return "Choke"
+	case MsgUnchoke:
+		return "Unchoke"
+	case MsgInterested:
+		return "Interested"
+	case MsgNotInterested:
+		return "Not Interested"
+	case MsgHave:
+		return "Have"
+	case MsgBitfield:
+		return "Bitfield"
+	case MsgRequest:
+		return "Request"
+	case MsgPiece:
+		return "Piece"
+	case MsgCancel:
+		return "Cancel"
+	default:
+		return "-"
+	}
+}
+
 func (m *Message) Serialize() []byte {
 	if m == nil { // keep-alive message
 		return make([]byte, 4)
 	}
 
+	// <length prefix><message ID><payload>
 	length := uint32(len(m.Payload) + 1) // +1 for ID
 	buf := make([]byte, 4+length)
-
 	binary.BigEndian.PutUint32(buf[0:4], length)
 	buf[4] = byte(m.ID)
 	copy(buf[5:], m.Payload)
@@ -47,20 +64,14 @@ func (m *Message) Serialize() []byte {
 	return buf
 }
 
-// ReadMessage reads a single message from r. It returns nil for a
-// keep-alive frame, or a populated Message for other types.
 func ReadMessage(r io.Reader) (*Message, error) {
 	var length uint32
-
 	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
 		return nil, err
 	}
-
-	// keep-alive message
-	if length == 0 {
+	if length == 0 { // keep-alive
 		return nil, nil
 	}
-
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(r, buf); err != nil {
 		return nil, err
@@ -75,40 +86,31 @@ func WriteMessage(w io.Writer, message *Message) error {
 	return err
 }
 
-// MessageChoke creates a choke message.
 func MessageChoke() *Message {
 	return &Message{ID: MsgChoke}
 }
 
-// MessageUnchoke creates an unchoke message (unexported).
 func MessageUnchoke() *Message {
 	return &Message{ID: MsgUnchoke}
 }
 
-// MessageInterested creates an interested message.
 func MessageInterested() *Message {
 	return &Message{ID: MsgInterested}
 }
 
-// MessageNotInterested creates a not interested message.
 func MessageNotInterested() *Message {
 	return &Message{ID: MsgNotInterested}
 }
 
-// MessageHave creates a have message for a given piece index.
 func MessageHave(index int) *Message {
 	payload := make([]byte, 4)
-
 	binary.BigEndian.PutUint32(payload, uint32(index))
 
 	return &Message{ID: MsgHave, Payload: payload}
 }
 
-// MessageRequest creates a request message for a block defined by
-// piece index, begin offset, and length.
 func MessageRequest(index, begin, length int) *Message {
 	payload := make([]byte, 12)
-
 	binary.BigEndian.PutUint32(payload[0:4], uint32(index))
 	binary.BigEndian.PutUint32(payload[4:8], uint32(begin))
 	binary.BigEndian.PutUint32(payload[8:12], uint32(length))
@@ -116,11 +118,8 @@ func MessageRequest(index, begin, length int) *Message {
 	return &Message{ID: MsgRequest, Payload: payload}
 }
 
-// MessagePiece creates a piece message carrying a data block for the
-// given piece index and begin offset.
 func MessagePiece(index, begin int, block []byte) *Message {
 	payload := make([]byte, 8+len(block))
-
 	binary.BigEndian.PutUint32(payload[0:4], uint32(index))
 	binary.BigEndian.PutUint32(payload[4:8], uint32(begin))
 	copy(payload[8:], block)
@@ -128,10 +127,8 @@ func MessagePiece(index, begin int, block []byte) *Message {
 	return &Message{ID: MsgPiece, Payload: payload}
 }
 
-// MessageCancel creates a cancel message for a previously requested block.
 func MessageCancel(index, begin, length int) *Message {
 	payload := make([]byte, 12)
-
 	binary.BigEndian.PutUint32(payload[0:4], uint32(index))
 	binary.BigEndian.PutUint32(payload[4:8], uint32(begin))
 	binary.BigEndian.PutUint32(payload[8:12], uint32(length))

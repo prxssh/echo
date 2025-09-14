@@ -18,9 +18,9 @@ import useFilterSort from './hooks/useFilterSort';
 function App() {
     const [items, setItems] = useState<Models.Torrent[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'general' | 'trackers'>(
-        'general'
-    );
+    const [activeTab, setActiveTab] = useState<
+        'general' | 'trackers' | 'peers'
+    >('general');
     const [query, setQuery] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -243,10 +243,14 @@ function App() {
     );
 }
 
+import { PeersProvider } from './providers/PeersProvider';
+
 export default function AppWithProviders() {
     return (
         <TrackerStatsProvider>
-            <App />
+            <PeersProvider>
+                <App />
+            </PeersProvider>
         </TrackerStatsProvider>
     );
 }

@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"context"
 	"encoding/binary"
 	"log/slog"
 	"net"
@@ -55,27 +56,36 @@ func NewPeer(trackerPeer *tracker.Peer, m *Manager) (*Peer, error) {
 		peerInterested: false,
 		pieceBF:        bitfield.New(m.pieces),
 		mailbox:        make(chan *Message, 128),
+		stopped:        make(chan struct{}),
 	}, nil
 }
 
-func (p *Peer) Start(globalDone <-chan struct{}) {
+func (p *Peer) Start(ctx context.Context, globalDone <-chan struct{}) {
+	p.emitStarted(ctx)
+
 	var wg sync.WaitGroup
-	wg.Go(func() { p.readMessages(globalDone) })
-	wg.Go(func() { p.writeMessages(globalDone) })
+	wg.Go(func() { p.readMessages(ctx, globalDone) })
+	wg.Go(func() { p.writeMessages(ctx, globalDone) })
 
 	wg.Wait()
 }
 
-func (p *Peer) Stop() {
+func (p *Peer) Addr() string {
+	return p.conn.RemoteAddr().String()
+}
+
+func (p *Peer) Stop(ctx context.Context) {
 	p.stopOnce.Do(func() {
 		close(p.stopped)
 		_ = p.conn.Close()
 		close(p.mailbox)
+
+		p.emitStopped(ctx)
 	})
 }
 
-func (p *Peer) readMessages(globalDone <-chan struct{}) {
-	defer p.Stop()
+func (p *Peer) readMessages(ctx context.Context, globalDone <-chan struct{}) {
+	defer p.Stop(ctx)
 
 	for {
 		select {
@@ -88,6 +98,15 @@ func (p *Peer) readMessages(globalDone <-chan struct{}) {
 
 		message, err := p.readMessage()
 		if err != nil {
+			if ne, ok := err.(net.Error); ok &&
+				ne.Timeout() { // peer is just idle
+				slog.Debug(
+					"peer idle timeout",
+					slog.String("addr", p.Addr()),
+				)
+				continue
+			}
+
 			slog.Error(
 				"peer read error",
 				slog.String("error", err.Error()),
@@ -99,8 +118,11 @@ func (p *Peer) readMessages(globalDone <-chan struct{}) {
 			return
 		}
 		if message == nil { // keep-alive
+			p.emitMessage(ctx, "Keep Alive")
 			continue
 		}
+
+		p.emitMessage(ctx, message.ID.String())
 
 		switch message.ID {
 		case MsgChoke:
@@ -145,8 +167,8 @@ func (p *Peer) readMessages(globalDone <-chan struct{}) {
 	}
 }
 
-func (p *Peer) writeMessages(globalDone <-chan struct{}) {
-	defer p.Stop()
+func (p *Peer) writeMessages(ctx context.Context, globalDone <-chan struct{}) {
+	defer p.Stop(ctx)
 
 	for {
 		select {

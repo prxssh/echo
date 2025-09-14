@@ -68,6 +68,7 @@ func ParseTorrent(data []byte) (*Torrent, error) {
 
 func (t *Torrent) Start(ctx context.Context) {
 	go t.TrackerManager.Start(ctx)
+	go t.PeerManager.Start(ctx)
 }
 
 func (t *Torrent) Close() {

@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"context"
 	"crypto/sha1"
 	"sync"
 	"time"
@@ -21,9 +22,9 @@ func defaultConfig() Config {
 	return Config{
 		MaxPeers:         100,
 		DialWorkers:      50,
-		ReadTimeout:      10 * time.Second,
-		WriteTimeout:     20 * time.Second,
-		HandshakeTimeout: 30 * time.Second,
+		ReadTimeout:      2 * time.Minute,
+		WriteTimeout:     30 * time.Second,
+		HandshakeTimeout: 1 * time.Second,
 		KeepAlive:        30 * time.Second,
 	}
 }
@@ -53,7 +54,7 @@ func NewManager(
 		peerID:        peerID,
 		pieces:        pieces,
 		done:          make(chan struct{}),
-		candidatesBuf: make(chan *tracker.Peer, 1000),
+		candidatesBuf: make(chan *tracker.Peer, 1001),
 		peers:         make(map[string]*Peer),
 	}
 	if cfg == nil {
@@ -65,13 +66,13 @@ func NewManager(
 	return m, nil
 }
 
-func (m *Manager) Start() {
+func (m *Manager) Start(ctx context.Context) {
 	for w := 0; w < m.cfg.DialWorkers; w++ {
-		m.dialWorkersWg.Go(func() { m.dialPeers() })
+		m.dialWorkersWg.Go(func() { m.dialPeers(ctx) })
 	}
 }
 
-func (m *Manager) Stop() {
+func (m *Manager) Stop(ctx context.Context) {
 	select {
 	case <-m.done:
 	default:
@@ -82,7 +83,7 @@ func (m *Manager) Stop() {
 
 	m.peerMut.RLock()
 	for _, peer := range m.peers {
-		peer.Stop()
+		peer.Stop(ctx)
 	}
 	m.peerMut.RUnlock()
 }
@@ -102,7 +103,7 @@ func (m *Manager) Enqueue(trackerPeers []*tracker.Peer) {
 	}
 }
 
-func (m *Manager) dialPeers() {
+func (m *Manager) dialPeers(ctx context.Context) {
 	for {
 		select {
 		case <-m.done:
@@ -119,23 +120,24 @@ func (m *Manager) dialPeers() {
 			if err != nil {
 				continue
 			}
-			if !m.admitPeer(trackerPeer.Addr(), peer) {
-				peer.Stop()
+			if !m.admitPeer(peer) {
+				peer.Stop(ctx)
 				continue
 			}
 
-			go func(addr string, peer *Peer) {
-				peer.Start(m.done)
-				m.removePeer(addr)
-			}(trackerPeer.Addr(), peer)
+			go func(ctx context.Context, peer *Peer) {
+				peer.Start(ctx, m.done)
+				m.removePeer(ctx, peer.Addr())
+			}(ctx, peer)
 		}
 	}
 }
 
-func (m *Manager) admitPeer(addr string, peer *Peer) bool {
+func (m *Manager) admitPeer(peer *Peer) bool {
 	m.peerMut.Lock()
 	defer m.peerMut.Unlock()
 
+	addr := peer.Addr()
 	if _, exists := m.peers[addr]; exists {
 		return false
 	}
@@ -144,7 +146,7 @@ func (m *Manager) admitPeer(addr string, peer *Peer) bool {
 	return true
 }
 
-func (m *Manager) removePeer(addr string) {
+func (m *Manager) removePeer(ctx context.Context, addr string) {
 	m.peerMut.Lock()
 	defer m.peerMut.Unlock()
 
@@ -152,7 +154,7 @@ func (m *Manager) removePeer(addr string) {
 	if !ok {
 		return
 	}
-	peer.Stop()
+	peer.Stop(ctx)
 }
 
 func (m *Manager) hasPeer(addr string) bool {

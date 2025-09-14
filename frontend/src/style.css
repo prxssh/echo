@@ -216,6 +216,9 @@ body {
 .tracker-grid-row {
     border-bottom: 1px solid var(--color-border-weak);
 }
+.tracker-grid-row:hover {
+    background: var(--color-surface-strong);
+}
 .tracker-grid > div {
     /* Roomier rows for readability */
     padding: var(--space-3) var(--space-3);
@@ -235,6 +238,90 @@ body {
 .tracker-grid .num {
     text-align: left;
     white-space: nowrap;
+}
+
+/* Peers list (grid, resizable) */
+.peers-grid {
+    display: grid;
+    grid-template-columns:
+        var(--peers-col-1, 48px)
+        var(--peers-col-2, minmax(280px, 1fr))
+        var(--peers-col-3, 200px);
+    align-items: center;
+    column-gap: 0;
+    min-width: 560px;
+}
+.peers-grid-header {
+    font-weight: 600;
+    opacity: 0.85;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+.peers-grid-header > div {
+    position: relative;
+}
+.peers-grid-header > div + div::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    background: var(--color-border);
+    pointer-events: none;
+}
+.peers-grid-row {
+    border-bottom: 1px solid var(--color-border-weak);
+}
+.peers-grid-row:hover {
+    background: var(--color-surface-strong);
+}
+.peers-grid > div {
+    padding: var(--space-3) var(--space-3);
+}
+.peers-grid .num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Visual ping when a peer message arrives */
+@keyframes peerPulse {
+    0% {
+        background: var(--color-accent-weak);
+    }
+    100% {
+        background: transparent;
+    }
+}
+.peers-grid-row.peer-hot {
+    animation: peerPulse 900ms ease-out 1;
+}
+
+@keyframes peerRemovePulse {
+    0% {
+        background: var(--color-danger-weak, rgba(255, 107, 107, 0.22));
+    }
+    50% {
+        background: transparent;
+    }
+    100% {
+        background: var(--color-danger-weak, rgba(255, 107, 107, 0.22));
+    }
+}
+.peers-grid-row.peer-removing {
+    animation: peerRemovePulse 1s ease-in-out 3;
+}
+
+@keyframes peerAddPulse {
+    0% {
+        background: var(--color-success-weak, rgba(80, 200, 120, 0.22));
+    }
+    100% {
+        background: transparent;
+    }
+}
+.peers-grid-row.peer-added {
+    animation: peerAddPulse 900ms ease-out 1;
 }
 
 /* Ensure numeric headers align like table headers (left) */

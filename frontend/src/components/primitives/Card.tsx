@@ -1,13 +1,11 @@
 import React from 'react';
 
 export type CardProps = React.HTMLAttributes<HTMLDivElement> & {
-    as?: keyof JSX.IntrinsicElements;
     title?: string;
     actions?: React.ReactNode;
 };
 
 export default function Card({
-    as: Comp = 'div',
     title,
     actions,
     className = '',
@@ -15,7 +13,7 @@ export default function Card({
     ...rest
 }: CardProps) {
     return (
-        <Comp className={`ui-card card ${className}`.trim()} {...rest}>
+        <div className={`ui-card card ${className}`.trim()} {...rest}>
             {(title || actions) && (
                 <div
                     className="card-header"
@@ -30,6 +28,6 @@ export default function Card({
                 </div>
             )}
             {children}
-        </Comp>
+        </div>
     );
 }
