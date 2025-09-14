@@ -2,4 +2,6 @@ build/bin
 node_modules
 frontend/dist
 cmd/echo/frontend
-data/
+
+data/*.torrent
+data/.DS_Store
