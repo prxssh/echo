@@ -7,8 +7,8 @@ import TrackersList from './TrackersList';
 
 type Props = {
     torrent: Models.Torrent;
-    activeTab: 'general' | 'trackers' | 'files';
-    onTabChange: (tab: 'general' | 'trackers' | 'files') => void;
+    activeTab: 'general' | 'trackers';
+    onTabChange: (tab: 'general' | 'trackers') => void;
     trackerStats?: Record<string, { seeders: number; leechers: number; intervalSec: number; peersCount: number; at: number }>;
 };
 
@@ -47,12 +47,6 @@ export const DetailsPanel: React.FC<Props> = ({
                 >
                     Trackers
                 </button>
-                <button
-                    className={`tab ${activeTab === 'files' ? 'active' : ''}`}
-                    onClick={() => onTabChange('files')}
-                >
-                    Files
-                </button>
             </div>
 
             {activeTab === 'general' && (
@@ -72,14 +66,7 @@ export const DetailsPanel: React.FC<Props> = ({
                         </div>
                         <div className="metric">
                             <div className="metric-label">Privacy</div>
-                            <div
-                                className={`badge ${isPrivate ? 'badge-warn' : 'badge-ok'}`}
-                                aria-label={
-                                    isPrivate
-                                        ? 'Private torrent'
-                                        : 'Public torrent'
-                                }
-                            >
+                            <div className="metric-value" aria-label={isPrivate ? 'Private torrent' : 'Public torrent'}>
                                 {isPrivate ? 'Private' : 'Public'}
                             </div>
                         </div>
@@ -96,8 +83,8 @@ export const DetailsPanel: React.FC<Props> = ({
                             <div className="mono wrap break-all">{id}</div>
                             <button
                                 className="btn-ghost btn-copy"
-                                title="Copy infohash"
-                                aria-label="Copy infohash"
+                                title={copied ? 'Copied' : 'Copy infohash'}
+                                aria-label={copied ? 'Copied' : 'Copy infohash'}
                                 onClick={() => {
                                     if (
                                         navigator.clipboard &&
@@ -115,18 +102,10 @@ export const DetailsPanel: React.FC<Props> = ({
                                     }
                                 }}
                             >
-                                Copy
+                                {copied ? 'Copied' : 'Copy'}
                             </button>
                         </div>
-                        {copied && (
-                            <div
-                                className="toast"
-                                role="status"
-                                aria-live="polite"
-                            >
-                                Copied
-                            </div>
-                        )}
+                        {/* Removed separate toast; the button label reflects Copied state */}
                     </div>
 
                     <div className="kv-grid">
@@ -141,23 +120,24 @@ export const DetailsPanel: React.FC<Props> = ({
                             onClick={() => onTabChange('trackers')}
                             aria-label="View trackers"
                         >
-                            <div className="label">Trackers</div>
+                            <div className="label">
+                                Trackers
+                                <span className="kv-affordance" aria-hidden="true">›</span>
+                            </div>
                             <div className="value">{trackers}</div>
                         </button>
-                        <button
-                            className="kv kv-link"
-                            onClick={() => onTabChange('files')}
-                            aria-label="View files"
-                        >
-                            <div className="label">Files</div>
-                            <div className="value">{files}</div>
-                        </button>
+                        {comment && (
+                            <div className="kv">
+                                <div className="label">Comment</div>
+                                <div className="value wrap">{comment}</div>
+                            </div>
+                        )}
                     </div>
 
-                    {comment && (
+                    {(t.metainfo?.info?.files?.length || 0) > 0 && (
                         <div className="section-block">
-                            <div className="label">Comment</div>
-                            <div className="wrap">{comment}</div>
+                            <div className="label">Files</div>
+                            <FileTree files={(t.metainfo?.info?.files as any) || []} />
                         </div>
                     )}
                 </div>
@@ -167,15 +147,6 @@ export const DetailsPanel: React.FC<Props> = ({
                 (t.metainfo?.announceUrls?.length || 0) > 0 && (
                     <div className="section-block">
                         <TrackersList urls={t.metainfo?.announceUrls || []} stats={trackerStats || {}} />
-                    </div>
-                )}
-
-            {activeTab === 'files' &&
-                (t.metainfo?.info?.files?.length || 0) > 0 && (
-                    <div className="section-block">
-                        <FileTree
-                            files={(t.metainfo?.info?.files as any) || []}
-                        />
                     </div>
                 )}
         </div>

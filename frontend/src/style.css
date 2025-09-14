@@ -5,6 +5,11 @@ html {
     color: var(--color-text);
 }
 
+/* Native dark UI elements when using Dark OLED */
+:root[data-theme='dark-oled'] {
+    color-scheme: dark;
+}
+
 /* Berkeley Mono embedding (optional). Place licensed WOFF2 files under
    src/assets/fonts/ with the following names. If not present, the app
    will fall back to system monospace fonts. */

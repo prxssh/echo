@@ -15,9 +15,7 @@ import useFilterSort from './hooks/useFilterSort';
 function App() {
     const [items, setItems] = useState<Models.Torrent[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<
-        'general' | 'trackers' | 'files'
-    >('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'trackers'>('general');
     const [query, setQuery] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -113,6 +111,11 @@ function App() {
                 if (unique.length > 0) {
                     setItems((prev) => [...unique, ...prev]);
                     setPage(1);
+                    // Auto-open details for the first newly added torrent
+                    const firstId = infoHashHex(unique[0]);
+                    if (firstId) setSelectedId(firstId);
+                    // Ensure DetailsPanel defaults to General after uploads
+                    setActiveTab('general');
                 }
             } catch (e: any) {
                 setError(e?.message ?? 'Failed to parse torrent');

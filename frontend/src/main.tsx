@@ -7,6 +7,9 @@ const container = document.getElementById('root');
 
 const root = createRoot(container!);
 
+// Lock the app to Dark OLED theme
+document.documentElement.setAttribute('data-theme', 'dark-oled');
+
 root.render(
     <React.StrictMode>
         <App />

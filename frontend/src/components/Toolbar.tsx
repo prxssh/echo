@@ -1,5 +1,4 @@
 import React from 'react';
-import ThemeToggle from './ThemeToggle';
 
 type Props = {
     title?: string;
@@ -41,7 +40,6 @@ export const Toolbar: React.FC<Props> = ({
                         Clear all
                     </button>
                 )}
-                <ThemeToggle />
             </div>
         </div>
     );
