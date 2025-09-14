@@ -9,13 +9,11 @@ import (
 	"github.com/prxssh/echo/internal/bencode"
 )
 
-// helper to build a valid single-file metainfo blob
 func buildSingleFileMeta(
 	t *testing.T,
 	withPrivate bool,
 ) ([]byte, map[string]any) {
 	t.Helper()
-	// two 20-byte piece hashes (ASCII to avoid any surprises)
 	pieces := append(
 		bytes.Repeat([]byte{'A'}, 20),
 		bytes.Repeat([]byte{'B'}, 20)...)
@@ -45,7 +43,6 @@ func buildSingleFileMeta(
 	return buf.Bytes(), info
 }
 
-// helper to build a valid multi-file metainfo blob
 func buildMultiFileMeta(t *testing.T) ([]byte, map[string]any) {
 	t.Helper()
 
@@ -79,7 +76,7 @@ func buildMultiFileMeta(t *testing.T) ([]byte, map[string]any) {
 		[]any{
 			"http://t2/a",
 			"http://t1/a",
-		}, // duplicate to test de-dupe
+		},
 	}
 
 	top := map[string]any{
@@ -96,7 +93,7 @@ func buildMultiFileMeta(t *testing.T) ([]byte, map[string]any) {
 
 func TestNew_SingleFile(t *testing.T) {
 	data, infoDict := buildSingleFileMeta(t, false)
-	m, err := New(bytes.NewReader(data))
+	m, err := ParseMetainfo(bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -164,7 +161,7 @@ func TestNew_SingleFile(t *testing.T) {
 
 func TestNew_MultiFile(t *testing.T) {
 	data, infoDict := buildMultiFileMeta(t)
-	m, err := New(bytes.NewReader(data))
+	m, err := ParseMetainfo(bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -234,7 +231,7 @@ func TestNew_Errors(t *testing.T) {
 		if err := bencode.NewEncoder(&buf).Encode(map[string]any{"announce": "x"}); err != nil {
 			t.Fatalf("encode: %v", err)
 		}
-		if _, err := New(bytes.NewReader(buf.Bytes())); err == nil {
+		if _, err := ParseMetainfo(bytes.NewReader(buf.Bytes())); err == nil {
 			t.Fatalf("expected error for missing info dictionary")
 		}
 	})
@@ -254,7 +251,7 @@ func TestNew_Errors(t *testing.T) {
 			t.Fatalf("encode: %v", err)
 		}
 
-		if _, err := New(bytes.NewReader(buf.Bytes())); err == nil {
+		if _, err := ParseMetainfo(bytes.NewReader(buf.Bytes())); err == nil {
 			t.Fatalf("expected error for invalid pieces length")
 		}
 	})
@@ -272,7 +269,7 @@ func TestNew_Errors(t *testing.T) {
 			t.Fatalf("encode: %v", err)
 		}
 
-		if _, err := New(bytes.NewReader(buf.Bytes())); err == nil {
+		if _, err := ParseMetainfo(bytes.NewReader(buf.Bytes())); err == nil {
 			t.Fatalf(
 				"expected error for missing single-file length",
 			)
@@ -296,7 +293,7 @@ func TestNew_Errors(t *testing.T) {
 		if err := bencode.NewEncoder(&buf).Encode(map[string]any{"info": info}); err != nil {
 			t.Fatalf("encode: %v", err)
 		}
-		if _, err := New(bytes.NewReader(buf.Bytes())); err == nil {
+		if _, err := ParseMetainfo(bytes.NewReader(buf.Bytes())); err == nil {
 			t.Fatalf("expected error for non-string path element")
 		}
 	})

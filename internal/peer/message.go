@@ -1,7 +1,9 @@
 package peer
 
 import (
+	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -45,7 +47,7 @@ func (mid MessageID) String() string {
 	case MsgCancel:
 		return "Cancel"
 	default:
-		return "-"
+		return fmt.Sprintf("Unknown(%d)", mid)
 	}
 }
 
@@ -64,6 +66,40 @@ func (m *Message) Serialize() []byte {
 	return buf
 }
 
+func (m *Message) ParseHave() (uint32, bool) {
+	if len(m.Payload) != 4 {
+		return 0, false
+	}
+
+	return binary.BigEndian.Uint32(m.Payload), true
+}
+
+func (m *Message) ParseRequest() (idx, begin, length uint32, ok bool) {
+	if len(m.Payload) != 12 {
+		return 0, 0, 0, false
+	}
+
+	return binary.BigEndian.Uint32(
+			m.Payload[0:4],
+		), binary.BigEndian.Uint32(
+			m.Payload[4:8],
+		), binary.BigEndian.Uint32(
+			m.Payload[8:12],
+		), true
+}
+
+func (m *Message) ParsePiece() (idx, begin uint32, block []byte, ok bool) {
+	if len(m.Payload) < 8 {
+		return 0, 0, nil, false
+	}
+
+	return binary.BigEndian.Uint32(
+			m.Payload[0:4],
+		), binary.BigEndian.Uint32(
+			m.Payload[4:8],
+		), m.Payload[8:], true
+}
+
 func ReadMessage(r io.Reader) (*Message, error) {
 	var length uint32
 	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
@@ -80,9 +116,14 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	return &Message{ID: MessageID(buf[0]), Payload: buf[1:]}, nil
 }
 
-func WriteMessage(w io.Writer, message *Message) error {
-	packet := message.Serialize()
-	_, err := w.Write(packet)
+func WriteMessage(w io.Writer, m *Message) error {
+	if m == nil { // keep-alive
+		var z [4]byte
+		_, err := io.Copy(w, bytes.NewReader(z[:]))
+		return err
+	}
+
+	_, err := io.Copy(w, bytes.NewReader(m.Serialize()))
 	return err
 }
 
@@ -107,6 +148,13 @@ func MessageHave(index int) *Message {
 	binary.BigEndian.PutUint32(payload, uint32(index))
 
 	return &Message{ID: MsgHave, Payload: payload}
+}
+
+func MessageBitfield(bits []byte) *Message {
+	cp := make([]byte, len(bits))
+	copy(cp, bits)
+
+	return &Message{ID: MsgBitfield, Payload: cp}
 }
 
 func MessageRequest(index, begin, length int) *Message {

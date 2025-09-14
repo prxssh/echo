@@ -41,7 +41,7 @@ type Manager struct {
 	peerMut sync.RWMutex
 	peers   map[string]*Peer
 
-	dialWorkersWg sync.WaitGroup
+	dialWorkers sync.WaitGroup
 }
 
 func NewManager(
@@ -68,7 +68,7 @@ func NewManager(
 
 func (m *Manager) Start(ctx context.Context) {
 	for w := 0; w < m.cfg.DialWorkers; w++ {
-		m.dialWorkersWg.Go(func() { m.dialPeers(ctx) })
+		m.dialWorkers.Go(func() { m.dialPeers(ctx) })
 	}
 }
 
@@ -78,8 +78,7 @@ func (m *Manager) Stop(ctx context.Context) {
 	default:
 		close(m.done)
 	}
-
-	m.dialWorkersWg.Wait()
+	m.dialWorkers.Wait()
 
 	m.peerMut.RLock()
 	for _, peer := range m.peers {

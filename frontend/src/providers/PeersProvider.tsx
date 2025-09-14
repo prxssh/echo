@@ -18,6 +18,7 @@ export type Peer = {
     lastMsg?: string; // last message type
     lastMsgAt?: number;
     removing?: boolean;
+    adding?: boolean;
 };
 
 type Ctx = {
@@ -112,7 +113,7 @@ export function PeersProvider({ children }: { children: React.ReactNode }) {
                         lastMsg: prev[key]?.lastMsg,
                         lastMsgAt: prev[key]?.lastMsgAt,
                         // mark as added for a brief pulse
-                        ...(prev[key]?.adding ? {} : { adding: true as any }),
+                        ...(prev[key]?.adding ? {} : { adding: true }),
                     },
                 }));
                 // Clear any previous add timer, then set a new one to remove the added pulse
@@ -122,7 +123,7 @@ export function PeersProvider({ children }: { children: React.ReactNode }) {
                     setPeers((prev) => ({
                         ...prev,
                         [key]: prev[key]
-                            ? { ...prev[key]!, adding: false as any }
+                            ? { ...prev[key]!, adding: false }
                             : prev[key],
                     }));
                     addTimersRef.current.delete(key);

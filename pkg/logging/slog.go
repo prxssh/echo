@@ -16,43 +16,27 @@ import (
 	"github.com/fatih/color"
 )
 
-// Buffer pool to reduce allocations
 var bufPool = sync.Pool{
 	New: func() interface{} {
 		return new(bytes.Buffer)
 	},
 }
 
-// PrettyHandlerOptions configures the PrettyHandler behavior.
 type PrettyHandlerOptions struct {
-	// SlogOpts are the standard slog handler options
-	SlogOpts slog.HandlerOptions
-	// UseColor enables/disables colored output (default: true)
-	// Automatically disabled when output is not a TTY
-	UseColor bool
-	// ShowSource includes source file information in logs
-	ShowSource bool
-	// FullSource shows the full file path instead of just filename
-	FullSource bool
-	// CompactJSON renders JSON attributes in a single line
-	CompactJSON bool
-	// TimeFormat customizes timestamp format (default: RFC3339)
-	TimeFormat string
-	// LevelWidth ensures consistent level string width for alignment
-	LevelWidth int
-	// DisableTimestamp omits timestamps from output
-	DisableTimestamp bool
-	// FieldSeparator separates different log components (default: " | ")
-	FieldSeparator string
-	// MaxFieldLength truncates field values longer than this (0 = no limit)
-	MaxFieldLength int
-	// SortKeys sorts JSON keys alphabetically
-	SortKeys bool
-	// DisableHTMLEscape disables HTML escaping in JSON output
+	SlogOpts          slog.HandlerOptions
+	UseColor          bool
+	ShowSource        bool
+	FullSource        bool
+	CompactJSON       bool
+	TimeFormat        string
+	LevelWidth        int
+	DisableTimestamp  bool
+	FieldSeparator    string
+	MaxFieldLength    int
+	SortKeys          bool
 	DisableHTMLEscape bool
 }
 
-// DefaultOptions returns production-ready default options.
 func DefaultOptions() PrettyHandlerOptions {
 	return PrettyHandlerOptions{
 		SlogOpts: slog.HandlerOptions{
@@ -72,32 +56,27 @@ func DefaultOptions() PrettyHandlerOptions {
 	}
 }
 
-// PrettyHandler implements a colorful, human-readable log handler for slog.
 type PrettyHandler struct {
 	opts   PrettyHandlerOptions
 	writer io.Writer
-	mu     *sync.Mutex // Pointer for copyability
+	mu     *sync.Mutex
 	groups []string
 	attrs  []slog.Attr
 
-	// Color functions cached based on options
-	colorTime    func(...interface{}) string
-	colorLevel   map[slog.Level]func(...interface{}) string
-	colorMessage func(...interface{}) string
-	colorSource  func(...interface{}) string
-	colorFields  func(...interface{}) string
-	colorError   func(...interface{}) string
+	colorTime    func(...any) string
+	colorLevel   map[slog.Level]func(...any) string
+	colorMessage func(...any) string
+	colorSource  func(...any) string
+	colorFields  func(...any) string
+	colorError   func(...any) string
 }
 
-// NewPrettyHandler creates a new PrettyHandler with the given writer and
-// options.
 func NewPrettyHandler(w io.Writer, opts *PrettyHandlerOptions) *PrettyHandler {
 	if opts == nil {
 		defaultOpts := DefaultOptions()
 		opts = &defaultOpts
 	}
 
-	// Validate and set defaults
 	if opts.TimeFormat == "" {
 		opts.TimeFormat = time.RFC3339
 	}
@@ -115,22 +94,20 @@ func NewPrettyHandler(w io.Writer, opts *PrettyHandlerOptions) *PrettyHandler {
 		groups: make([]string, 0),
 		attrs:  make([]slog.Attr, 0),
 	}
-
 	h.initColorFuncs()
 
 	return h
 }
 
-// initColorFuncs initializes color formatting functions based on options.
 func (h *PrettyHandler) initColorFuncs() {
 	if !h.opts.UseColor {
-		noColor := func(a ...interface{}) string { return fmt.Sprint(a...) }
+		noColor := func(a ...any) string { return fmt.Sprint(a...) }
 		h.colorTime = noColor
 		h.colorMessage = noColor
 		h.colorSource = noColor
 		h.colorFields = noColor
 		h.colorError = noColor
-		h.colorLevel = make(map[slog.Level]func(...interface{}) string)
+		h.colorLevel = make(map[slog.Level]func(...any) string)
 		for _, level := range []slog.Level{
 			slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError,
 		} {
@@ -139,14 +116,13 @@ func (h *PrettyHandler) initColorFuncs() {
 		return
 	}
 
-	// Set up colored output
 	h.colorTime = color.New(color.FgHiBlack).SprintFunc()
 	h.colorMessage = color.New(color.FgCyan).SprintFunc()
 	h.colorSource = color.New(color.FgHiBlack).SprintFunc()
 	h.colorFields = color.New(color.FgWhite).SprintFunc()
 	h.colorError = color.New(color.FgRed, color.Bold).SprintFunc()
 
-	h.colorLevel = map[slog.Level]func(...interface{}) string{
+	h.colorLevel = map[slog.Level]func(...any) string{
 		slog.LevelDebug: color.New(color.FgMagenta).SprintFunc(),
 		slog.LevelInfo:  color.New(color.FgBlue).SprintFunc(),
 		slog.LevelWarn:  color.New(color.FgYellow).SprintFunc(),
@@ -154,37 +130,30 @@ func (h *PrettyHandler) initColorFuncs() {
 	}
 }
 
-// Enabled reports whether the handler handles records at the given level.
 func (h *PrettyHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return level >= h.opts.SlogOpts.Level.Level()
 }
 
-// Handle formats and writes the log record.
 func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
-	// Get buffer from pool
 	buf := bufPool.Get().(*bytes.Buffer)
 	defer func() {
 		buf.Reset()
 		bufPool.Put(buf)
 	}()
 
-	// Build the log line
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Add timestamp
 	if !h.opts.DisableTimestamp {
 		timestamp := r.Time.Format(h.opts.TimeFormat)
 		buf.WriteString(h.colorTime(timestamp))
 		buf.WriteString(h.opts.FieldSeparator)
 	}
 
-	// Add level
 	level := h.formatLevel(r.Level)
 	buf.WriteString(level)
 	buf.WriteString(h.opts.FieldSeparator)
 
-	// Add source if enabled
 	if h.opts.ShowSource {
 		source := h.extractSource(r.PC)
 		if source != "" {
@@ -193,15 +162,12 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 	}
 
-	// Add message
 	buf.WriteString(h.colorMessage(r.Message))
 
-	// Collect and add attributes
 	attrs := h.collectAttributes(r)
 	if len(attrs) > 0 {
 		buf.WriteString(h.opts.FieldSeparator)
 		if err := h.formatAttributes(buf, attrs); err != nil {
-			// Fallback to simple formatting on error
 			buf.WriteString(
 				fmt.Sprintf(
 					"(error formatting attributes: %v)",
@@ -211,13 +177,11 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 	}
 
-	// Write the complete line
 	buf.WriteByte('\n')
 	_, err := h.writer.Write(buf.Bytes())
 	return err
 }
 
-// WithAttrs returns a new handler with additional attributes.
 func (h *PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	if len(attrs) == 0 {
 		return h
@@ -226,7 +190,6 @@ func (h *PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Create new handler with copied state
 	newHandler := &PrettyHandler{
 		opts:   h.opts,
 		writer: h.writer,
@@ -239,7 +202,6 @@ func (h *PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return newHandler
 }
 
-// WithGroup returns a new handler with the given group name.
 func (h *PrettyHandler) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return h
@@ -248,7 +210,6 @@ func (h *PrettyHandler) WithGroup(name string) slog.Handler {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Create new handler with added group
 	newHandler := &PrettyHandler{
 		opts:   h.opts,
 		writer: h.writer,
@@ -261,28 +222,23 @@ func (h *PrettyHandler) WithGroup(name string) slog.Handler {
 	return newHandler
 }
 
-// formatLevel formats the log level with appropriate styling.
 func (h *PrettyHandler) formatLevel(level slog.Level) string {
 	levelStr := strings.ToUpper(level.String())
 
-	// Pad for alignment
 	if h.opts.LevelWidth > 0 {
 		levelStr = fmt.Sprintf("%-*s", h.opts.LevelWidth, levelStr)
 	}
 
-	// Apply color
 	if colorFunc, ok := h.colorLevel[level]; ok {
 		return colorFunc(levelStr)
 	}
 
-	// Handle custom levels
 	if level > slog.LevelError {
 		return h.colorError(levelStr)
 	}
 	return levelStr
 }
 
-// extractSource extracts source information from program counter.
 func (h *PrettyHandler) extractSource(pc uintptr) string {
 	if pc == 0 {
 		return ""
@@ -300,11 +256,9 @@ func (h *PrettyHandler) extractSource(pc uintptr) string {
 		file = filepath.Base(file)
 	}
 
-	// Format as "file:line" or "file:line:function" for verbose mode
 	source := fmt.Sprintf("%s:%d", file, frame.Line)
 
 	if h.opts.SlogOpts.AddSource {
-		// Add function name for extra verbosity
 		funcName := frame.Function
 		if idx := strings.LastIndex(funcName, "."); idx >= 0 {
 			funcName = funcName[idx+1:]
@@ -315,47 +269,40 @@ func (h *PrettyHandler) extractSource(pc uintptr) string {
 	return source
 }
 
-// collectAttributes collects all attributes including groups and handler attrs.
 func (h *PrettyHandler) collectAttributes(
 	r slog.Record,
-) map[string]interface{} {
-	attrs := make(map[string]interface{})
+) map[string]any {
+	attrs := make(map[string]any)
 
-	// Add handler's pre-configured attributes
 	current := attrs
 	for _, group := range h.groups {
-		nested := make(map[string]interface{})
+		nested := make(map[string]any)
 		current[group] = nested
 		current = nested
 	}
 
-	// Add handler attributes
 	for _, attr := range h.attrs {
 		h.addAttribute(current, attr)
 	}
 
-	// Add record attributes
 	r.Attrs(func(attr slog.Attr) bool {
 		h.addAttribute(current, attr)
 		return true
 	})
 
-	// Clean up empty groups
 	h.cleanEmptyGroups(attrs)
 
 	return attrs
 }
 
-// addAttribute adds an attribute to the map, handling special cases.
 func (h *PrettyHandler) addAttribute(
-	attrs map[string]interface{},
+	attrs map[string]any,
 	attr slog.Attr,
 ) {
 	value := attr.Value.Resolve()
 
-	// Handle groups
 	if value.Kind() == slog.KindGroup {
-		group := make(map[string]interface{})
+		group := make(map[string]any)
 		for _, groupAttr := range value.Group() {
 			h.addAttribute(group, groupAttr)
 		}
@@ -365,8 +312,7 @@ func (h *PrettyHandler) addAttribute(
 		return
 	}
 
-	// Convert value to appropriate type
-	var v interface{}
+	var v any
 	switch value.Kind() {
 	case slog.KindTime:
 		v = value.Time().Format(h.opts.TimeFormat)
@@ -374,7 +320,6 @@ func (h *PrettyHandler) addAttribute(
 		v = value.Duration().String()
 	case slog.KindAny:
 		v = value.Any()
-		// Truncate if needed
 		if h.opts.MaxFieldLength > 0 {
 			if str, ok := v.(string); ok &&
 				len(str) > h.opts.MaxFieldLength {
@@ -388,10 +333,9 @@ func (h *PrettyHandler) addAttribute(
 	attrs[attr.Key] = v
 }
 
-// cleanEmptyGroups removes empty nested groups from the attributes map.
-func (h *PrettyHandler) cleanEmptyGroups(attrs map[string]interface{}) {
+func (h *PrettyHandler) cleanEmptyGroups(attrs map[string]any) {
 	for key, value := range attrs {
-		if nested, ok := value.(map[string]interface{}); ok {
+		if nested, ok := value.(map[string]any); ok {
 			h.cleanEmptyGroups(nested)
 			if len(nested) == 0 {
 				delete(attrs, key)
@@ -400,10 +344,9 @@ func (h *PrettyHandler) cleanEmptyGroups(attrs map[string]interface{}) {
 	}
 }
 
-// formatAttributes formats attributes as JSON.
 func (h *PrettyHandler) formatAttributes(
 	buf *bytes.Buffer,
-	attrs map[string]interface{},
+	attrs map[string]any,
 ) error {
 	if len(attrs) == 0 {
 		return nil
@@ -418,7 +361,6 @@ func (h *PrettyHandler) formatAttributes(
 		encoder.SetIndent("", "  ")
 	}
 
-	// Encode to temporary buffer first to apply coloring
 	var jsonBuf bytes.Buffer
 	encoder = json.NewEncoder(&jsonBuf)
 	encoder.SetEscapeHTML(!h.opts.DisableHTMLEscape)
@@ -432,10 +374,8 @@ func (h *PrettyHandler) formatAttributes(
 		return err
 	}
 
-	// Remove trailing newline from JSON encoder
 	result := bytes.TrimRight(jsonBuf.Bytes(), "\n")
 
-	// Apply color and write
 	buf.WriteString(h.colorFields(string(result)))
 
 	return nil

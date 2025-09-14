@@ -2,7 +2,6 @@ package peer
 
 import (
 	"context"
-	"encoding/binary"
 	"log/slog"
 	"net"
 	"sync"
@@ -22,9 +21,9 @@ type Peer struct {
 	peerChoking    bool
 	peerInterested bool
 
-	mailbox  chan *Message
-	stopped  chan struct{}
-	stopOnce sync.Once
+	requestsQueue chan *Message
+	stopped       chan struct{}
+	stopOnce      sync.Once
 
 	pieceBF bitfield.Bitfield
 }
@@ -55,7 +54,7 @@ func NewPeer(trackerPeer *tracker.Peer, m *Manager) (*Peer, error) {
 		peerChoking:    true,
 		peerInterested: false,
 		pieceBF:        bitfield.New(m.pieces),
-		mailbox:        make(chan *Message, 128),
+		requestsQueue:  make(chan *Message, 128),
 		stopped:        make(chan struct{}),
 	}, nil
 }
@@ -78,7 +77,7 @@ func (p *Peer) Stop(ctx context.Context) {
 	p.stopOnce.Do(func() {
 		close(p.stopped)
 		_ = p.conn.Close()
-		close(p.mailbox)
+		close(p.requestsQueue)
 
 		p.emitStopped(ctx)
 	})
@@ -136,27 +135,15 @@ func (p *Peer) readMessages(ctx context.Context, globalDone <-chan struct{}) {
 		case MsgBitfield:
 			p.pieceBF = bitfield.FromBytes(message.Payload)
 		case MsgHave:
-			if len(message.Payload) < 4 {
-				slog.Debug("have: short payload")
-				break
+			index, ok := message.ParseHave()
+			if !ok {
+				continue
 			}
-
-			idx := binary.BigEndian.Uint32(message.Payload)
-			p.pieceBF.Set(int(idx))
+			p.pieceBF.Set(int(index))
 		case MsgPiece:
-			if len(message.Payload) < 8 {
-				slog.Debug("piece: short payload")
-				break
-			}
-
-			index := binary.BigEndian.Uint32(message.Payload[0:4])
-			begin := binary.BigEndian.Uint32(message.Payload[4:8])
-			block := message.Payload[8:]
-
-			// TODO: hand off to piece downloader
-			_ = index
-			_ = begin
-			_ = block
+			continue
+		case MsgRequest:
+			continue
 		default:
 			slog.Warn(
 				"unknown message",
@@ -170,13 +157,32 @@ func (p *Peer) readMessages(ctx context.Context, globalDone <-chan struct{}) {
 func (p *Peer) writeMessages(ctx context.Context, globalDone <-chan struct{}) {
 	defer p.Stop(ctx)
 
+	lastKeepAliveSend := time.Now()
+	keepAliveTicker := time.NewTicker(p.m.cfg.KeepAlive)
+	defer keepAliveTicker.Stop()
+
 	for {
 		select {
 		case <-globalDone:
 			return
 		case <-p.stopped:
 			return
-		case message, ok := <-p.mailbox:
+		case <-keepAliveTicker.C:
+			if time.Since(lastKeepAliveSend) < p.m.cfg.KeepAlive {
+				continue
+			}
+
+			if err := p.writeMessage(nil); err != nil {
+				slog.Debug(
+					"keep-alive write error",
+					slog.String("addr", p.Addr()),
+					slog.String("error", err.Error()),
+				)
+				return
+			}
+			lastKeepAliveSend = time.Now()
+
+		case message, ok := <-p.requestsQueue:
 			if !ok {
 				return
 			}

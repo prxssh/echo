@@ -7,32 +7,14 @@ import (
 	"strconv"
 )
 
-// Encoder writes bencoded values to an io.Writer.
-//
-// It supports encoding the following Go types:
-//   - string (encoded as <len>:<data>)
-//   - int64 (encoded as i<number>e)
-//   - []any (bencoded list; elements may be any supported type)
-//
-// - map[string]any (bencoded dictionary; keys are encoded in lexicographic
-// order)
-//
-// Any other type results in an error from Encode.
 type Encoder struct {
-	// w is the destination for the encoded bytes.
 	w io.Writer
 }
 
-// NewEncoder creates an Encoder that writes to w.
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w: w}
 }
 
-// Encode writes the bencoded representation of v to the underlying writer.
-//
-// See the Encoder type documentation for the set of supported value types.
-// For dictionaries, keys are sorted lexicographically to produce a canonical
-// encoding as required by the bencode specification.
 func (e *Encoder) Encode(v any) error {
 	switch vt := v.(type) {
 	case string:

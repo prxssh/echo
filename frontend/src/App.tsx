@@ -6,7 +6,7 @@ import TorrentTable, { SortDir, SortKey } from './components/TorrentTable';
 import { toRow, formatBytes } from './utils/torrent';
 import Pager from './components/Pager';
 import DetailsPanel from './components/DetailsPanel';
-import { AddTorrent } from '../wailsjs/go/ui/UI';
+import { AddTorrent, RemoveTorrent } from '../wailsjs/go/ui/UI';
 import {
     TrackerStatsProvider,
     useTrackerStats,
@@ -160,22 +160,53 @@ function App() {
                             rows={pageItems.map(toRow)}
                             selectedId={selectedId}
                             onSelect={setSelectedId}
-                            onRemove={(id: string) => {
+                            onRemove={async (id: string) => {
+                                // Find the torrent by hex id
+                                const t = items.find((x) => {
+                                    const arr = x.metainfo?.info?.infoHash as
+                                        | number[]
+                                        | undefined;
+                                    const hex = arr
+                                        ? arr
+                                              .map((b) =>
+                                                  (b & 0xff)
+                                                      .toString(16)
+                                                      .padStart(2, '0')
+                                              )
+                                              .join('')
+                                        : '';
+                                    return hex === id;
+                                });
+                                // Call backend to remove, if hash bytes available
+                                try {
+                                    const arr = t?.metainfo?.info?.infoHash as
+                                        | number[]
+                                        | undefined;
+                                    if (
+                                        arr &&
+                                        Array.isArray(arr) &&
+                                        arr.length > 0
+                                    ) {
+                                        await RemoveTorrent(arr);
+                                    }
+                                } catch {}
+
+                                // Update UI state
                                 setItems((prev) =>
-                                    prev.filter(
-                                        (x) =>
-                                            (
-                                                x.metainfo?.info?.infoHash as
-                                                    | number[]
-                                                    | undefined
-                                            )
-                                                ?.map((b) =>
-                                                    (b & 0xff)
-                                                        .toString(16)
-                                                        .padStart(2, '0')
-                                                )
-                                                .join('') !== id
-                                    )
+                                    prev.filter((x) => {
+                                        const arr = x.metainfo?.info
+                                            ?.infoHash as number[] | undefined;
+                                        const hex = arr
+                                            ? arr
+                                                  .map((b) =>
+                                                      (b & 0xff)
+                                                          .toString(16)
+                                                          .padStart(2, '0')
+                                                  )
+                                                  .join('')
+                                            : '';
+                                        return hex !== id;
+                                    })
                                 );
                                 if (selectedId === id) setSelectedId(null);
                             }}

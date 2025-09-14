@@ -71,15 +71,9 @@ func (t *Torrent) Start(ctx context.Context) {
 	go t.PeerManager.Start(ctx)
 }
 
-func (t *Torrent) Close() {
-}
-
-func connectRemotePeers(
-	from string,
-	peers []*tracker.Peer,
-	peerManager *peer.Manager,
-) {
-	peerManager.Enqueue(peers)
+func (t *Torrent) Stop(ctx context.Context) {
+	t.TrackerManager.Stop(ctx)
+	t.PeerManager.Stop(ctx)
 }
 
 func generatePeerID() ([sha1.Size]byte, error) {

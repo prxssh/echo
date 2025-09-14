@@ -31,5 +31,11 @@ func (ui *UI) AddTorrent(data []byte) (*torrent.Torrent, error) {
 }
 
 func (ui *UI) RemoveTorrent(infoHash [sha1.Size]byte) {
+	torrent, ok := ui.torrents[infoHash]
+	if !ok {
+		return
+	}
+
+	torrent.Stop(ui.ctx)
 	delete(ui.torrents, infoHash)
 }

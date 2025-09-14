@@ -15,51 +15,19 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Config tunes how the tracker Manager announces and scrapes.
 type Config struct {
-	// NumWant is how many peers we ask a tracker for in each announce.
-	// Typical values are 50-200. Too high can flood your peers.
-	NumWant uint32
-
-	// ScrapeEvery controls how often we perform a scrape request (if the
-	// tracker supports it). 0 disables scrape.
-	ScrapeEvery time.Duration
-
-	// AnnounceTimeout is the per-request timeout for announces.
-	AnnounceTimeout time.Duration
-
-	// MaxBackoff caps the exponential backoff after repeated announce
-	// failures. Ensures we don't backoff forever.
-	MaxBackoff time.Duration
-
-	// InitialBackoff is the starting delay after the first error. Backoff
-	// doubles on each failure until MaxBackoff.
-	InitialBackoff time.Duration
-
-	// FallbackInterval is used if the tracker response omits an interval.
-	// Common default is 30 minutes.
-	FallbackInterval time.Duration
-
-	// MinInterval is the minimum allowed announce interval. Some trackers
-	// require you not to announce more often than this. If >0, we honor the
-	// larger of Interval vs MinInterval.
-	MinInterval time.Duration
-
-	// JitterFraction adds randomness to all sleeps so we don't sync up with
-	// thousands of other clients.
-	JitterFraction float64
-
-	// RespectMinInterval, if true, enforces the tracker's min interval
-	// field. If false, we may announce sooner (not recommended).
+	NumWant            uint32
+	ScrapeEvery        time.Duration
+	AnnounceTimeout    time.Duration
+	MaxBackoff         time.Duration
+	InitialBackoff     time.Duration
+	FallbackInterval   time.Duration
+	MinInterval        time.Duration
+	JitterFraction     float64
 	RespectMinInterval bool
-
-	// StoppedTimeout is the timeout for sending a "stopped" event when
-	// shutting down. Should be short (a few seconds).
-	StoppedTimeout time.Duration
+	StoppedTimeout     time.Duration
 }
 
-// DefaultConfig returns a conservative set of defaults for tracker
-// announcements and scrapes, including timeouts, backoff, and jitter.
 func defaultConfig() Config {
 	return Config{
 		NumWant:            50,
@@ -75,43 +43,19 @@ func defaultConfig() Config {
 	}
 }
 
-// Represents the function which is called when peers are received from the
-// tracker.
 type OnPeersFunc func(peers []*Peer)
 
-// Manager coordinates all trackers for a torrent.
-// It runs announce/scrape loops, merges peers, and tracks session stats.
 type Manager struct {
-	// cfg holds all announce/scrape tuning knobs (timeouts, backoff, etc.).
-	cfg Config
-
-	// trackers is the set of tracker clients (HTTP/UDP) this manager
-	// drives. Typically populated from the .torrent announce-list tiers.
-	trackers []Tracker
-
-	// port is the TCP/UDP listen port we advertise to trackers for incoming
-	// peers.
-	port uint16
-
-	// infoHash uniquely identifies the torrent (SHA-1 of the info dict).
-	infoHash [sha1.Size]byte
-
-	// peerID is this client's unique identifier in the swarm (20 bytes).
-	// Sent on every announce/handshake.
-	peerID [sha1.Size]byte
-
-	// uploaded/downloaded/left track aggregate stats for this torrent.
-	// Values are updated atomically and passed in announces.
+	cfg        Config
+	trackers   []Tracker
+	port       uint16
+	infoHash   [sha1.Size]byte
+	peerID     [sha1.Size]byte
 	uploaded   atomic.Uint64
 	downloaded atomic.Uint64
 	left       atomic.Uint64
-
-	// closed signals whether the manager has been stopped.
-	// Once true, further announces are suppressed.
-	closed atomic.Bool
-
-	// OnPeers is the function that is called when announce returns peers.
-	OnPeers OnPeersFunc
+	closed     atomic.Bool
+	OnPeers    OnPeersFunc
 }
 
 type Opts struct {
@@ -176,7 +120,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 
 	grp, ctx := errgroup.WithContext(ctx)
-
 	for _, tracker := range m.trackers {
 		tracker := tracker
 
@@ -195,8 +138,8 @@ func (m *Manager) Start(ctx context.Context) error {
 			slog.String("error", err.Error()),
 		)
 	}
-	m.closed.Store(true)
 
+	m.closed.Store(true)
 	return err
 }
 
