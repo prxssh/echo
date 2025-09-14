@@ -514,6 +514,18 @@
     border-collapse: collapse;
     font-size: var(--font-size-sm);
 }
+.torrent-table {
+    table-layout: fixed; /* ensure colgroup widths apply and resizing behaves */
+}
+.torrent-table th,
+.torrent-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.torrent-table .sort-btn { min-width: 0; overflow: hidden; }
+.torrent-table .sort-btn span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .table thead th {
     text-align: left;
     padding: var(--space-2) var(--space-3);
@@ -523,10 +535,46 @@
     font-weight: 600;
     position: sticky;
     top: 0;
-    background: var(--color-bg);
+    background: var(--color-surface);
     z-index: 1;
-    box-shadow: 0 1px 0 0 var(--color-border);
 }
+/* Header column separators for clarity (match Trackers) */
+.table thead th + th {
+}
+.table thead th + th::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    background: var(--color-border);
+    pointer-events: none;
+}
+/* Do not draw a separator before the Name column (2nd th) */
+.table thead th:nth-child(2)::before {
+    content: none;
+}
+.table thead th.th-resizable { position: sticky; }
+.th-resizable { position: sticky; }
+.col-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 10px;
+    cursor: col-resize;
+    user-select: none;
+    height: 100%;
+    z-index: 2; /* ensure above separators */
+}
+.col-resizer.col-left {
+    left: 0;
+    right: auto;
+}
+.col-resizer::after { display: none; }
+
+/* Allow resizer in grid headers (Trackers) */
+.grid-resizable { position: relative; }
 .table tbody td {
     padding: var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--color-border-weak);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TorrentRow } from '../utils/torrent';
 
 export type SortKey = 'name' | 'size' | 'pieces' | 'pieceSize';
@@ -26,9 +26,53 @@ export const TorrentTable: React.FC<Props> = ({
     const body = useMemo(() => rows, [rows]);
 
     const tableRef = useRef<HTMLTableElement | null>(null);
+    const dragging = useRef<{
+        col: number; // 1-based index matching --torrent-col-N
+        startX: number;
+        startW: number;
+    } | null>(null);
+    const [isResizing, setIsResizing] = useState(false);
+    const isResizingRef = useRef(false);
+
+    const getVarPx = (name: string, fallback: number): number => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+        const px = parseInt(v || '', 10);
+        return Number.isFinite(px) ? px : fallback;
+    };
+    const setVarPx = (name: string, value: number) => {
+        document.documentElement.style.setProperty(name, `${Math.max(40, Math.round(value))}px`);
+    };
+    const persistWidths = () => {
+        try {
+            const widths: Record<string, number> = {};
+            for (let i = 1; i <= 6; i++) {
+                const v = getVarPx(`--torrent-col-${i}`, 0);
+                if (v > 0) widths[i] = v;
+            }
+            localStorage.setItem('torrentTable.colWidths', JSON.stringify(widths));
+        } catch {}
+    };
+    const loadPersisted = () => {
+        try {
+            const raw = localStorage.getItem('torrentTable.colWidths');
+            if (!raw) return false;
+            const obj = JSON.parse(raw) as Record<string, number>;
+            for (const k of Object.keys(obj)) {
+                const i = Number(k);
+                if (!Number.isFinite(i)) continue;
+                setVarPx(`--torrent-col-${i}`, obj[k]!);
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    };
 
     useEffect(() => {
         const updateVars = () => {
+            if (isResizingRef.current) return; // don't fight user drag
+            // If user saved sizes, don't overwrite during resize
+            if (loadPersisted()) return;
             const el = tableRef.current;
             if (!el || !el.tHead || !el.tHead.rows.length) return;
             const cells = el.tHead.rows[0].cells;
@@ -47,15 +91,63 @@ export const TorrentTable: React.FC<Props> = ({
             ro.disconnect();
             window.removeEventListener('resize', updateVars);
         };
-    }, [rows.length]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            if (!dragging.current) return;
+            const { col, startX, startW } = dragging.current;
+            const dx = e.clientX - startX;
+            const next = Math.max(50, startW + dx);
+            setVarPx(`--torrent-col-${col}`, next);
+            setIsResizing(true);
+        };
+        const onUp = () => {
+            if (dragging.current) {
+                persistWidths();
+            }
+            dragging.current = null;
+            setIsResizing(false);
+            isResizingRef.current = false;
+            document.body.style.cursor = '';
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        if (isResizing) {
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+    }, [isResizing]);
+
+    const startResize = (colIndex: number, ev: React.MouseEvent) => {
+        ev.preventDefault();
+        const startW = getVarPx(`--torrent-col-${colIndex}`, 120);
+        dragging.current = { col: colIndex, startX: ev.clientX, startW };
+        setIsResizing(true);
+        isResizingRef.current = true;
+        document.body.style.cursor = 'col-resize';
+    };
 
     return (
         <div className="table-wrap">
             <table ref={tableRef} className="table torrent-table">
+                <colgroup>
+                    <col style={{ width: 'var(--torrent-col-1, 36px)' }} />
+                    <col style={{ width: 'var(--torrent-col-2, 280px)' }} />
+                    <col style={{ width: 'var(--torrent-col-3, 120px)' }} />
+                    <col style={{ width: 'var(--torrent-col-4, 120px)' }} />
+                    <col style={{ width: 'var(--torrent-col-5, 120px)' }} />
+                    <col style={{ width: 'var(--torrent-col-6, 90px)' }} />
+                </colgroup>
                 <thead>
                     <tr>
-                        <th style={{ width: '36px' }}></th>
-                        <th
+                        <th className="th-resizable"></th>
+                        <th className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'name'
@@ -82,8 +174,9 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
+                            <div className="col-resizer" onMouseDown={(e) => startResize(2, e)} />
                         </th>
-                        <th
+                        <th className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'size'
@@ -110,8 +203,9 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
+                            <div className="col-resizer" onMouseDown={(e) => startResize(3, e)} />
                         </th>
-                        <th
+                        <th className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'pieces'
@@ -138,8 +232,9 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
+                            <div className="col-resizer" onMouseDown={(e) => startResize(4, e)} />
                         </th>
-                        <th
+                        <th className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'pieceSize'
@@ -166,8 +261,9 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
+                            <div className="col-resizer" onMouseDown={(e) => startResize(5, e)} />
                         </th>
-                        <th>Hash</th>
+                        <th className="th-resizable">Hash<div className="col-resizer" onMouseDown={(e) => startResize(6, e)} /></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -215,7 +311,7 @@ export const TorrentTable: React.FC<Props> = ({
                                 <td>{r.size}</td>
                                 <td>{r.pieces}</td>
                                 <td>{r.pieceLen}</td>
-                                <td className="mono">{r.id.slice(0, 10)}…</td>
+                                <td className="mono" title={r.id}>{r.id}</td>
                             </tr>
                         );
                     })}

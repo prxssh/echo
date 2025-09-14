@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 type Props = {
     urls: string[];
@@ -14,6 +14,84 @@ type Stat = {
 };
 
 export const TrackersList: React.FC<Props> = ({ urls, stats = {} }) => {
+    // Column width management for tracker grid (independent of torrent table)
+    const headerRef = useRef<HTMLDivElement | null>(null);
+    const dragging = useRef<{ col: number; startX: number; startW: number } | null>(null);
+    const [isResizing, setIsResizing] = useState(false);
+
+    const getVarPx = (name: string, fallback: number): number => {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+        const px = parseInt(v || '', 10);
+        return Number.isFinite(px) ? px : fallback;
+    };
+    const setVarPx = (name: string, value: number) => {
+        document.documentElement.style.setProperty(name, `${Math.max(40, Math.round(value))}px`);
+    };
+    const persistWidths = () => {
+        try {
+            const widths: Record<string, number> = {};
+            for (let i = 1; i <= 6; i++) {
+                const v = getVarPx(`--tracker-col-${i}`, 0);
+                if (v > 0) widths[i] = v;
+            }
+            localStorage.setItem('trackerGrid.colWidths', JSON.stringify(widths));
+        } catch {}
+    };
+    const loadPersisted = () => {
+        try {
+            const raw = localStorage.getItem('trackerGrid.colWidths');
+            if (!raw) return false;
+            const obj = JSON.parse(raw) as Record<string, number>;
+            for (const k of Object.keys(obj)) {
+                const i = Number(k);
+                if (!Number.isFinite(i)) continue;
+                setVarPx(`--tracker-col-${i}`, obj[k]!);
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    };
+    useEffect(() => {
+        // Initialize widths: apply persisted widths if present; otherwise
+        // fall back to torrent column vars via CSS (handled in styles).
+        loadPersisted();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            if (!dragging.current) return;
+            const { col, startX, startW } = dragging.current;
+            const dx = e.clientX - startX;
+            const next = Math.max(50, startW + dx);
+            setVarPx(`--tracker-col-${col}`, next);
+            setIsResizing(true);
+        };
+        const onUp = () => {
+            if (dragging.current) persistWidths();
+            dragging.current = null;
+            setIsResizing(false);
+            document.body.style.cursor = '';
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        if (isResizing) {
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+    }, [isResizing]);
+    const startResize = (colIndex: number, ev: React.MouseEvent) => {
+        ev.preventDefault();
+        const startW = getVarPx(`--tracker-col-${colIndex}`, 120);
+        dragging.current = { col: colIndex, startX: ev.clientX, startW };
+        setIsResizing(true);
+        document.body.style.cursor = 'col-resize';
+    };
     const normalize = (u: string): string => {
         try {
             const parsed = new URL(u);
@@ -53,13 +131,28 @@ export const TrackersList: React.FC<Props> = ({ urls, stats = {} }) => {
     return (
         <div className="trackers">
             <div className="tracker-table-wrap">
-                <div className="tracker-grid tracker-grid-header">
+                <div className="tracker-grid tracker-grid-header" ref={headerRef}>
                     <div aria-hidden="true"></div>
-                    <div>Announce URL</div>
-                    <div className="num">Seeders</div>
-                    <div className="num">Leechers</div>
-                    <div className="num">Interval</div>
-                    <div className="num">Peers</div>
+                    <div className="grid-resizable">
+                        Announce URL
+                        <div className="col-resizer" onMouseDown={(e) => startResize(2, e)} />
+                    </div>
+                    <div className="num grid-resizable">
+                        Seeders
+                        <div className="col-resizer" onMouseDown={(e) => startResize(3, e)} />
+                    </div>
+                    <div className="num grid-resizable">
+                        Leechers
+                        <div className="col-resizer" onMouseDown={(e) => startResize(4, e)} />
+                    </div>
+                    <div className="num grid-resizable">
+                        Interval
+                        <div className="col-resizer" onMouseDown={(e) => startResize(5, e)} />
+                    </div>
+                    <div className="num grid-resizable">
+                        Peers
+                        <div className="col-resizer" onMouseDown={(e) => startResize(6, e)} />
+                    </div>
                 </div>
                 {rows.map(({ url, data }) => (
                     <div key={url} className="tracker-grid tracker-grid-row">
