@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 
+	"github.com/prxssh/echo/internal/peer"
 	"github.com/prxssh/echo/internal/tracker"
 )
 
@@ -16,6 +17,7 @@ type Torrent struct {
 	Uploaded       uint64           `json:"uploaded"`
 	Downloaded     uint64           `json:"downloaded"`
 	Left           uint64           `json:"left"`
+	PeerManager    *peer.Manager    `json:"-"`
 }
 
 func ParseTorrent(data []byte) (*Torrent, error) {
@@ -29,23 +31,37 @@ func ParseTorrent(data []byte) (*Torrent, error) {
 		return nil, err
 	}
 
-	trackerManager := tracker.NewManager(
+	peerManager, err := peer.NewManager(
+		metainfo.Info.Hash,
+		peerID,
+		len(metainfo.Info.Pieces),
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	trackerManager, err := tracker.NewManager(
 		metainfo.AnnounceURLs,
 		tracker.Opts{
 			InfoHash: metainfo.Info.Hash,
 			PeerID:   peerID,
 			Port:     6969,
 			Left:     metainfo.Size,
+			OnPeers:  peerManager.Enqueue,
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	torrent := &Torrent{
 		PeerID:         peerID,
 		Metainfo:       metainfo,
 		TrackerManager: trackerManager,
 		Left:           metainfo.Size,
+		PeerManager:    peerManager,
 	}
-	trackerManager.SetOnPeers(torrent.connectRemotePeers)
 
 	return torrent, nil
 }
@@ -57,7 +73,12 @@ func (t *Torrent) Start(ctx context.Context) {
 func (t *Torrent) Close() {
 }
 
-func (t *Torrent) connectRemotePeers(from string, peers []*tracker.Peer) {
+func connectRemotePeers(
+	from string,
+	peers []*tracker.Peer,
+	peerManager *peer.Manager,
+) {
+	peerManager.Enqueue(peers)
 }
 
 func generatePeerID() ([sha1.Size]byte, error) {

@@ -3,7 +3,6 @@ package tracker
 import (
 	"context"
 	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"math"
@@ -63,7 +62,7 @@ type Config struct {
 // announcements and scrapes, including timeouts, backoff, and jitter.
 func defaultConfig() Config {
 	return Config{
-		NumWant:            100,
+		NumWant:            50,
 		ScrapeEvery:        0,
 		AnnounceTimeout:    12 * time.Second,
 		MaxBackoff:         15 * time.Minute,
@@ -78,7 +77,7 @@ func defaultConfig() Config {
 
 // Represents the function which is called when peers are received from the
 // tracker.
-type OnPeersFunc func(from string, peers []*Peer)
+type OnPeersFunc func(peers []*Peer)
 
 // Manager coordinates all trackers for a torrent.
 // It runs announce/scrape loops, merges peers, and tracks session stats.
@@ -123,9 +122,10 @@ type Opts struct {
 	Downloaded uint64
 	Left       uint64
 	Cfg        *Config
+	OnPeers    OnPeersFunc
 }
 
-func NewManager(announceURLs []string, opts Opts) *Manager {
+func NewManager(announceURLs []string, opts Opts) (*Manager, error) {
 	m := &Manager{
 		cfg:      defaultConfig(),
 		port:     opts.Port,
@@ -133,9 +133,17 @@ func NewManager(announceURLs []string, opts Opts) *Manager {
 		peerID:   opts.PeerID,
 		trackers: make([]Tracker, 0, len(announceURLs)),
 	}
+	if opts.OnPeers == nil {
+		return nil, errors.New(
+			"expected OnPeers to be a function, but got nil",
+		)
+	} else {
+		m.OnPeers = opts.OnPeers
+	}
 	if opts.Cfg != nil {
 		m.cfg = *opts.Cfg
 	}
+
 	m.UpdateStats(opts.Uploaded, opts.Downloaded, opts.Left)
 
 	for _, url := range announceURLs {
@@ -153,33 +161,17 @@ func NewManager(announceURLs []string, opts Opts) *Manager {
 		slog.Debug("tracker added", slog.String("url", url))
 	}
 
-	return m
+	return m, nil
 }
 
-func (m *Manager) SetOnPeers(callback OnPeersFunc) {
-	m.OnPeers = callback
-}
-
-// UpdateStats atomically updates uploaded, downloaded, and left counters,
-// which are included in subsequent announce requests.
 func (m *Manager) UpdateStats(uploaded, downloaded, left uint64) {
 	m.uploaded.Store(uploaded)
 	m.downloaded.Store(downloaded)
 	m.left.Store(left)
 }
 
-// Start launches per-tracker announce (and optional scrape) loops and blocks
-// until the context is canceled or a fatal error occurs. If no trackers are
-// available, it returns an error.
 func (m *Manager) Start(ctx context.Context) error {
 	if len(m.trackers) == 0 {
-		slog.Warn(
-			"no trackers to start",
-			slog.String(
-				"infoHash",
-				hex.EncodeToString(m.infoHash[:]),
-			),
-		)
 		return errors.New("no tracker to start")
 	}
 
@@ -188,24 +180,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	for _, tracker := range m.trackers {
 		tracker := tracker
 
-		grp.Go(func() error {
-			slog.Debug(
-				"announce loop starting",
-				slog.String("url", tracker.URL()),
-			)
-
-			return m.runAnnounceLoop(ctx, tracker)
-		})
+		grp.Go(func() error { return m.runAnnounceLoop(ctx, tracker) })
 
 		if m.cfg.ScrapeEvery > 0 && tracker.SupportsScrape() {
-			grp.Go(func() error {
-				slog.Debug(
-					"scrape loop starting",
-					slog.String("url", tracker.URL()),
-				)
-
-				return m.runScrapeLoop(ctx, tracker)
-			})
+			grp.Go(
+				func() error { return m.runScrapeLoop(ctx, tracker) },
+			)
 		}
 	}
 	err := grp.Wait()
@@ -398,7 +378,7 @@ func (m *Manager) emitPeers(from string, peers []*Peer) {
 			}
 		}()
 
-		callback(from, ps)
+		callback(ps)
 	}(m.OnPeers, from, snapshot)
 }
 

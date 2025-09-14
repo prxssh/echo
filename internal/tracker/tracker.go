@@ -109,7 +109,7 @@ type Peer struct {
 	Port uint16 `json:"port"`
 }
 
-func (p *Peer) String() string {
+func (p *Peer) Addr() string {
 	return net.JoinHostPort(p.IP.String(), strconv.Itoa(int(p.Port)))
 }
 

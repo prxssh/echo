@@ -1,8 +1,7 @@
 package peer
 
 import (
-	"crypto/sha1"
-	"fmt"
+	"encoding/binary"
 	"log/slog"
 	"net"
 	"sync"
@@ -12,181 +11,178 @@ import (
 	"github.com/prxssh/echo/internal/tracker"
 )
 
-// Peer represents a remote BitTorrent peer connected over TCP.
 type Peer struct {
-	// Addr is the "host:port" address of the peer.
-	Addr string
-	// conn is the underlying TCP connection.
+	m *Manager
+
 	conn net.Conn
-	// state holds the local and remote choke/interest flags.
-	state *PeerState
-	// Bitfield keeps track of the pieces a peer has.
+
+	amChoking      bool
+	amInterested   bool
+	peerChoking    bool
+	peerInterested bool
+
+	mailbox  chan *Message
+	stopped  chan struct{}
+	stopOnce sync.Once
+
 	pieceBF bitfield.Bitfield
 }
 
-// PeerState tracks local and remote choke/interest flags for a connection.
-type PeerState struct {
-	AmChoking      bool
-	AmInterested   bool
-	PeerChoking    bool
-	PeerInterested bool
-}
-
-// PeerOpts bundles parameters required to talk to a remote peer.
-type PeerOpts struct {
-	// InfoHash is the torrent's 20-byte SHA1 info hash.
-	InfoHash [sha1.Size]byte
-	// PeerID is our 20-byte peer identifier.
-	PeerID [sha1.Size]byte
-	// Pieces is the number of pieces in the torrent.
-	Pieces int
-}
-
-// defaultTimeout is the connection and handshake timeout.
-const defaultTimeout time.Duration = 5 * time.Second
-
-// ConnectRemotePeers dials all tracker-provided peers concurrently,
-// performs the BitTorrent handshake, and returns the successfully
-// connected peers. Failed connections are logged and skipped.
-func ConnectRemotePeers(
-	trackerPeers []*tracker.Peer,
-	opts *PeerOpts,
-) ([]*Peer, error) {
-	var wg sync.WaitGroup
-	peerCh := make(chan *Peer, len(trackerPeers))
-
-	for _, trackerPeer := range trackerPeers {
-		wg.Go(func() {
-			addr := fmt.Sprintf(
-				"%s:%d",
-				trackerPeer.IP,
-				trackerPeer.Port,
-			)
-			conn, err := net.DialTimeout(
-				"tcp",
-				addr,
-				defaultTimeout,
-			)
-			if err != nil {
-				slog.Error(
-					"failed to connect remote peer",
-					slog.String("address", addr),
-					slog.Any("error", err),
-					slog.Any("peer", trackerPeer),
-				)
-				return
-			}
-
-			peer := &Peer{
-				Addr:    addr,
-				conn:    conn,
-				pieceBF: bitfield.New(opts.Pieces),
-				state:   initPeerState(),
-			}
-			if err := peer.performHandshake(opts); err != nil {
-				slog.Error(
-					"failed to perform handshake",
-					slog.Any("error", err),
-					slog.Any("peer", trackerPeer),
-				)
-				return
-			}
-
-			go peer.Start()
-			peerCh <- peer
-		})
-	}
-	wg.Wait()
-	close(peerCh)
-
-	peers := make([]*Peer, len(peerCh))
-	for peer := range peerCh {
-		peers = append(peers, peer)
-	}
-
-	return peers, nil
-}
-
-// initPeerState returns the initial state for a new peer connection.
-func initPeerState() *PeerState {
-	return &PeerState{
-		AmChoking:      true,
-		AmInterested:   false,
-		PeerChoking:    true,
-		PeerInterested: false,
-	}
-}
-
-// Start begins processing messages from the remote peer until the
-// connection is closed or an error occurs.
-func (p *Peer) Start() {
-	slog.Info(
-		"remote peer connected, starting process",
-		slog.Any("peer", p),
+func NewPeer(trackerPeer *tracker.Peer, m *Manager) (*Peer, error) {
+	conn, err := net.DialTimeout(
+		"tcp",
+		trackerPeer.Addr(),
+		m.cfg.HandshakeTimeout,
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	defer p.conn.Close()
-	p.readMessages()
+	_ = conn.SetReadDeadline(time.Now().Add(m.cfg.HandshakeTimeout))
+	handshake := NewHandshake(m.infoHash, m.peerID)
+	if err := handshake.Perform(conn); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	_ = conn.SetReadDeadline(time.Time{})
+
+	return &Peer{
+		m:              m,
+		conn:           conn,
+		amChoking:      true,
+		amInterested:   false,
+		peerChoking:    true,
+		peerInterested: false,
+		pieceBF:        bitfield.New(m.pieces),
+		mailbox:        make(chan *Message, 128),
+	}, nil
 }
 
-// Read pulls the next wire message from the peer connection.
-func (p *Peer) Read() (*Message, error) {
-	return ReadMessage(p.conn)
+func (p *Peer) Start(globalDone <-chan struct{}) {
+	var wg sync.WaitGroup
+	wg.Go(func() { p.readMessages(globalDone) })
+	wg.Go(func() { p.writeMessages(globalDone) })
+
+	wg.Wait()
 }
 
-// performHandshake exchanges the BitTorrent handshake with the remote peer.
-func (p *Peer) performHandshake(opts *PeerOpts) error {
-	p.conn.SetDeadline(time.Now().Add(defaultTimeout))
-	defer p.conn.SetDeadline(time.Time{})
-
-	h := NewHandshake(opts.InfoHash, opts.PeerID)
-	return h.Perform(p.conn)
+func (p *Peer) Stop() {
+	p.stopOnce.Do(func() {
+		close(p.stopped)
+		_ = p.conn.Close()
+		close(p.mailbox)
+	})
 }
 
-// readMessages continuously reads and handles messages from the peer.
-func (p *Peer) readMessages() {
+func (p *Peer) readMessages(globalDone <-chan struct{}) {
+	defer p.Stop()
+
 	for {
-		p.conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
-
-		msg, err := p.Read()
-		if err != nil {
+		select {
+		case <-globalDone:
 			return
-		}
-		if msg == nil { // keep-alive
-			continue
-		}
-
-		switch msg.ID {
-		case MsgBitfield:
-			p.pieceBF = bitfield.FromBytes(msg.Payload)
-
-		case MsgChoke:
-			p.state.PeerChoking = true
-
-		case MsgUnchoke:
-			p.state.PeerChoking = false
-
-		case MsgInterested:
-			p.state.PeerInterested = true
-
-		case MsgNotInterested:
-			p.state.PeerInterested = false
-
-		case MsgHave:
+		case <-p.stopped:
 			return
-
-		case MsgPiece:
-			return
-
 		default:
-			slog.Warn(
-				"received unknown message from peer",
-				slog.Any("message", msg),
+		}
+
+		message, err := p.readMessage()
+		if err != nil {
+			slog.Error(
+				"peer read error",
+				slog.String("error", err.Error()),
 				slog.String(
-					"peer",
+					"addr",
 					p.conn.RemoteAddr().String(),
 				),
 			)
+			return
+		}
+		if message == nil { // keep-alive
+			continue
+		}
+
+		switch message.ID {
+		case MsgChoke:
+			p.peerChoking = true
+		case MsgUnchoke:
+			p.peerChoking = false
+		case MsgInterested:
+			p.peerInterested = true
+		case MsgNotInterested:
+			p.peerInterested = false
+		case MsgBitfield:
+			p.pieceBF = bitfield.FromBytes(message.Payload)
+		case MsgHave:
+			if len(message.Payload) < 4 {
+				slog.Debug("have: short payload")
+				break
+			}
+
+			idx := binary.BigEndian.Uint32(message.Payload)
+			p.pieceBF.Set(int(idx))
+		case MsgPiece:
+			if len(message.Payload) < 8 {
+				slog.Debug("piece: short payload")
+				break
+			}
+
+			index := binary.BigEndian.Uint32(message.Payload[0:4])
+			begin := binary.BigEndian.Uint32(message.Payload[4:8])
+			block := message.Payload[8:]
+
+			// TODO: hand off to piece downloader
+			_ = index
+			_ = begin
+			_ = block
+		default:
+			slog.Warn(
+				"unknown message",
+				slog.Int("id", int(message.ID)),
+				slog.Any("payload", message.Payload),
+			)
 		}
 	}
+}
+
+func (p *Peer) writeMessages(globalDone <-chan struct{}) {
+	defer p.Stop()
+
+	for {
+		select {
+		case <-globalDone:
+			return
+		case <-p.stopped:
+			return
+		case message, ok := <-p.mailbox:
+			if !ok {
+				return
+			}
+			if message == nil {
+				continue
+			}
+
+			if err := p.writeMessage(message); err != nil {
+				slog.Debug(
+					"peer write error",
+					slog.String("error", err.Error()),
+				)
+				return
+			}
+		}
+	}
+}
+
+func (p *Peer) writeMessage(message *Message) error {
+	_ = p.conn.SetWriteDeadline(time.Now().Add(p.m.cfg.WriteTimeout))
+	defer p.conn.SetWriteDeadline(time.Time{})
+
+	return WriteMessage(p.conn, message)
+}
+
+func (p *Peer) readMessage() (*Message, error) {
+	_ = p.conn.SetReadDeadline(time.Now().Add(p.m.cfg.ReadTimeout))
+	defer p.conn.SetReadDeadline(time.Time{})
+
+	return ReadMessage(p.conn)
 }

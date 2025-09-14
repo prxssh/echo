@@ -69,6 +69,12 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	return &Message{ID: MessageID(buf[0]), Payload: buf[1:]}, nil
 }
 
+func WriteMessage(w io.Writer, message *Message) error {
+	packet := message.Serialize()
+	_, err := w.Write(packet)
+	return err
+}
+
 // MessageChoke creates a choke message.
 func MessageChoke() *Message {
 	return &Message{ID: MsgChoke}
