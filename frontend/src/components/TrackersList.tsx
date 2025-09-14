@@ -8,7 +8,8 @@ type Props = {
 type Stat = {
     seeders: number;
     leechers: number;
-    intervalSec: number; // converted from ns
+    intervalSec: number; // next announce in seconds (from ns)
+    minIntervalSec: number; // min announce in seconds (from ns)
     peersCount: number;
     at: number; // timestamp ms
 };
@@ -16,25 +17,37 @@ type Stat = {
 export const TrackersList: React.FC<Props> = ({ urls, stats = {} }) => {
     // Column width management for tracker grid (independent of torrent table)
     const headerRef = useRef<HTMLDivElement | null>(null);
-    const dragging = useRef<{ col: number; startX: number; startW: number } | null>(null);
+    const dragging = useRef<{
+        col: number;
+        startX: number;
+        startW: number;
+    } | null>(null);
     const [isResizing, setIsResizing] = useState(false);
 
     const getVarPx = (name: string, fallback: number): number => {
-        const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+        const v = getComputedStyle(document.documentElement).getPropertyValue(
+            name
+        );
         const px = parseInt(v || '', 10);
         return Number.isFinite(px) ? px : fallback;
     };
     const setVarPx = (name: string, value: number) => {
-        document.documentElement.style.setProperty(name, `${Math.max(40, Math.round(value))}px`);
+        document.documentElement.style.setProperty(
+            name,
+            `${Math.max(40, Math.round(value))}px`
+        );
     };
     const persistWidths = () => {
         try {
             const widths: Record<string, number> = {};
-            for (let i = 1; i <= 6; i++) {
+            for (let i = 1; i <= 7; i++) {
                 const v = getVarPx(`--tracker-col-${i}`, 0);
                 if (v > 0) widths[i] = v;
             }
-            localStorage.setItem('trackerGrid.colWidths', JSON.stringify(widths));
+            localStorage.setItem(
+                'trackerGrid.colWidths',
+                JSON.stringify(widths)
+            );
         } catch {}
     };
     const loadPersisted = () => {
@@ -131,37 +144,83 @@ export const TrackersList: React.FC<Props> = ({ urls, stats = {} }) => {
     return (
         <div className="trackers">
             <div className="tracker-table-wrap">
-                <div className="tracker-grid tracker-grid-header" ref={headerRef}>
+                <div
+                    className="tracker-grid tracker-grid-header"
+                    ref={headerRef}
+                >
                     <div aria-hidden="true"></div>
                     <div className="grid-resizable">
                         Announce URL
-                        <div className="col-resizer" onMouseDown={(e) => startResize(2, e)} />
+                        <div
+                            className="col-resizer"
+                            onMouseDown={(e) => startResize(2, e)}
+                        />
                     </div>
                     <div className="num grid-resizable">
                         Seeders
-                        <div className="col-resizer" onMouseDown={(e) => startResize(3, e)} />
+                        <div
+                            className="col-resizer"
+                            onMouseDown={(e) => startResize(3, e)}
+                        />
                     </div>
                     <div className="num grid-resizable">
                         Leechers
-                        <div className="col-resizer" onMouseDown={(e) => startResize(4, e)} />
+                        <div
+                            className="col-resizer"
+                            onMouseDown={(e) => startResize(4, e)}
+                        />
                     </div>
                     <div className="num grid-resizable">
-                        Interval
-                        <div className="col-resizer" onMouseDown={(e) => startResize(5, e)} />
+                        Next Announce
+                        <div
+                            className="col-resizer"
+                            onMouseDown={(e) => startResize(5, e)}
+                        />
+                    </div>
+                    <div className="num grid-resizable">
+                        Min Announce
+                        <div
+                            className="col-resizer"
+                            onMouseDown={(e) => startResize(6, e)}
+                        />
                     </div>
                     <div className="num grid-resizable">
                         Peers
-                        <div className="col-resizer" onMouseDown={(e) => startResize(6, e)} />
+                        <div
+                            className="col-resizer"
+                            onMouseDown={(e) => startResize(7, e)}
+                        />
                     </div>
                 </div>
                 {rows.map(({ url, data }) => (
                     <div key={url} className="tracker-grid tracker-grid-row">
                         <div aria-hidden="true"></div>
-                        <div className="mono wrap" title={url}>{url}</div>
+                        <div className="wrap" title={url}>
+                            {url}
+                        </div>
                         <div className="num">{data ? data.seeders : '-'}</div>
                         <div className="num">{data ? data.leechers : '-'}</div>
-                        <div className="num">{data ? `${data.intervalSec}s` : '-'}</div>
-                        <div className="num">{data ? data.peersCount : '-'}</div>
+                        <div className="num">
+                            {(() => {
+                                if (!data) return '-';
+                                const m = Math.floor(
+                                    (data.intervalSec || 0) / 60
+                                );
+                                return m > 0 ? `${m}m` : '-';
+                            })()}
+                        </div>
+                        <div className="num">
+                            {(() => {
+                                if (!data) return '-';
+                                const m = Math.floor(
+                                    (data.minIntervalSec || 0) / 60
+                                );
+                                return m > 0 ? `${m}m` : '-';
+                            })()}
+                        </div>
+                        <div className="num">
+                            {data ? data.peersCount : '-'}
+                        </div>
                     </div>
                 ))}
             </div>

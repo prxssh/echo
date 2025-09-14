@@ -1,0 +1,55 @@
+/* Global resets minimal to avoid visual churn */
+:root {
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* Focus ring baseline */
+:where(button, [role='button'], a, input, select, textarea) {
+    outline: none;
+}
+:where(button, [role='button'], a, input, select, textarea):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* Primitive base classes (use tokens) */
+.ui-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-weak);
+    border-radius: var(--radius-3);
+}
+.ui-btn {
+    height: var(--control-h);
+    padding: var(--control-py) var(--control-px);
+    border-radius: var(--radius-1);
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 1px solid var(--color-border);
+}
+.ui-btn.ghost {
+    background: transparent;
+}
+.ui-btn.primary {
+    background: var(--color-accent);
+    color: #0f141a;
+    border-color: var(--color-accent);
+}
+.ui-input,
+.ui-select {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    height: var(--control-h);
+    padding: var(--control-py) var(--control-px);
+    border-radius: var(--radius-1);
+}
+.ui-stack {
+    display: flex;
+    gap: var(--space-2);
+}

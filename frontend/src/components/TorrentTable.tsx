@@ -35,12 +35,17 @@ export const TorrentTable: React.FC<Props> = ({
     const isResizingRef = useRef(false);
 
     const getVarPx = (name: string, fallback: number): number => {
-        const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+        const v = getComputedStyle(document.documentElement).getPropertyValue(
+            name
+        );
         const px = parseInt(v || '', 10);
         return Number.isFinite(px) ? px : fallback;
     };
     const setVarPx = (name: string, value: number) => {
-        document.documentElement.style.setProperty(name, `${Math.max(40, Math.round(value))}px`);
+        document.documentElement.style.setProperty(
+            name,
+            `${Math.max(40, Math.round(value))}px`
+        );
     };
     const persistWidths = () => {
         try {
@@ -49,7 +54,10 @@ export const TorrentTable: React.FC<Props> = ({
                 const v = getVarPx(`--torrent-col-${i}`, 0);
                 if (v > 0) widths[i] = v;
             }
-            localStorage.setItem('torrentTable.colWidths', JSON.stringify(widths));
+            localStorage.setItem(
+                'torrentTable.colWidths',
+                JSON.stringify(widths)
+            );
         } catch {}
     };
     const loadPersisted = () => {
@@ -76,10 +84,15 @@ export const TorrentTable: React.FC<Props> = ({
             const el = tableRef.current;
             if (!el || !el.tHead || !el.tHead.rows.length) return;
             const cells = el.tHead.rows[0].cells;
-            const widths = Array.from(cells).map((c) => c.getBoundingClientRect().width);
+            const widths = Array.from(cells).map(
+                (c) => c.getBoundingClientRect().width
+            );
             const root = document.documentElement.style;
             for (let i = 0; i < widths.length; i++) {
-                root.setProperty(`--torrent-col-${i + 1}`, `${Math.round(widths[i])}px`);
+                root.setProperty(
+                    `--torrent-col-${i + 1}`,
+                    `${Math.round(widths[i])}px`
+                );
             }
         };
 
@@ -147,7 +160,8 @@ export const TorrentTable: React.FC<Props> = ({
                 <thead>
                     <tr>
                         <th className="th-resizable"></th>
-                        <th className="th-resizable"
+                        <th
+                            className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'name'
@@ -174,9 +188,13 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
-                            <div className="col-resizer" onMouseDown={(e) => startResize(2, e)} />
+                            <div
+                                className="col-resizer"
+                                onMouseDown={(e) => startResize(2, e)}
+                            />
                         </th>
-                        <th className="th-resizable"
+                        <th
+                            className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'size'
@@ -203,9 +221,13 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
-                            <div className="col-resizer" onMouseDown={(e) => startResize(3, e)} />
+                            <div
+                                className="col-resizer"
+                                onMouseDown={(e) => startResize(3, e)}
+                            />
                         </th>
-                        <th className="th-resizable"
+                        <th
+                            className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'pieces'
@@ -232,9 +254,13 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
-                            <div className="col-resizer" onMouseDown={(e) => startResize(4, e)} />
+                            <div
+                                className="col-resizer"
+                                onMouseDown={(e) => startResize(4, e)}
+                            />
                         </th>
-                        <th className="th-resizable"
+                        <th
+                            className="th-resizable"
                             role="columnheader"
                             aria-sort={
                                 sortKey === 'pieceSize'
@@ -261,9 +287,18 @@ export const TorrentTable: React.FC<Props> = ({
                                         : '↕'}
                                 </span>
                             </button>
-                            <div className="col-resizer" onMouseDown={(e) => startResize(5, e)} />
+                            <div
+                                className="col-resizer"
+                                onMouseDown={(e) => startResize(5, e)}
+                            />
                         </th>
-                        <th className="th-resizable">Hash<div className="col-resizer" onMouseDown={(e) => startResize(6, e)} /></th>
+                        <th className="th-resizable">
+                            Hash
+                            <div
+                                className="col-resizer"
+                                onMouseDown={(e) => startResize(6, e)}
+                            />
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -311,7 +346,9 @@ export const TorrentTable: React.FC<Props> = ({
                                 <td>{r.size}</td>
                                 <td>{r.pieces}</td>
                                 <td>{r.pieceLen}</td>
-                                <td className="mono" title={r.id}>{r.id}</td>
+                                <td className="mono" title={r.id}>
+                                    {r.id}
+                                </td>
                             </tr>
                         );
                     })}

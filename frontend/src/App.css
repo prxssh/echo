@@ -454,7 +454,9 @@
 .kv-affordance {
     opacity: 0.6;
     margin-left: 6px;
-    transition: transform var(--motion-fast) ease, opacity var(--motion-fast) ease;
+    transition:
+        transform var(--motion-fast) ease,
+        opacity var(--motion-fast) ease;
 }
 .kv-link:hover .kv-affordance,
 .kv-link:focus-visible .kv-affordance {
@@ -512,7 +514,7 @@
 .table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-md);
 }
 .torrent-table {
     table-layout: fixed; /* ensure colgroup widths apply and resizing behaves */
@@ -524,8 +526,14 @@
     white-space: nowrap;
     min-width: 0;
 }
-.torrent-table .sort-btn { min-width: 0; overflow: hidden; }
-.torrent-table .sort-btn span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.torrent-table .sort-btn {
+    min-width: 0;
+    overflow: hidden;
+}
+.torrent-table .sort-btn span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .table thead th {
     text-align: left;
     padding: var(--space-2) var(--space-3);
@@ -555,8 +563,12 @@
 .table thead th:nth-child(2)::before {
     content: none;
 }
-.table thead th.th-resizable { position: sticky; }
-.th-resizable { position: sticky; }
+.table thead th.th-resizable {
+    position: sticky;
+}
+.th-resizable {
+    position: sticky;
+}
 .col-resizer {
     position: absolute;
     top: 0;
@@ -571,14 +583,22 @@
     left: 0;
     right: auto;
 }
-.col-resizer::after { display: none; }
+.col-resizer::after {
+    display: none;
+}
 
 /* Allow resizer in grid headers (Trackers) */
-.grid-resizable { position: relative; }
+.grid-resizable {
+    position: relative;
+}
 .table tbody td {
     padding: var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--color-border-weak);
     vertical-align: middle;
+}
+.torrent-table tbody td {
+    /* Make torrent rows roomier for readability */
+    padding: var(--space-3) var(--space-3);
 }
 .table tbody tr:hover {
     background: var(--color-surface-strong);

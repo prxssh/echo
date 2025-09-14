@@ -20,6 +20,37 @@ html {
     font-weight: 400;
     font-display: swap;
 }
+
+/* Inter (UI) embedding (optional). Place WOFF2 files under src/assets/fonts/
+   The app will fall back to system UI fonts if not present. */
+@font-face {
+    font-family: 'Inter var';
+    src:
+        local('Inter var'),
+        local('InterVariable'),
+        url('assets/fonts/Inter-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Inter';
+    src:
+        local('Inter Regular'),
+        url('assets/fonts/Inter-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Inter';
+    src:
+        local('Inter Bold'),
+        url('assets/fonts/Inter-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
 @font-face {
     font-family: 'Berkeley Mono';
     src: url('assets/fonts/berkeley-mono-italic.woff2') format('woff2');
@@ -58,16 +89,36 @@ body {
 }
 
 /* Typography utilities */
-.text-2xs { font-size: var(--font-size-2xs); }
-.text-xs { font-size: var(--font-size-xs); }
-.text-sm { font-size: var(--font-size-sm); }
-.text-md { font-size: var(--font-size-md); }
-.text-lg { font-size: var(--font-size-lg); }
-.text-xl { font-size: var(--font-size-xl); }
-.text-2xl { font-size: var(--font-size-2xl); }
-.leading-normal { line-height: var(--line-height); }
-.font-mono { font-family: var(--font-mono); }
-.font-ui { font-family: var(--font-ui); }
+.text-2xs {
+    font-size: var(--font-size-2xs);
+}
+.text-xs {
+    font-size: var(--font-size-xs);
+}
+.text-sm {
+    font-size: var(--font-size-sm);
+}
+.text-md {
+    font-size: var(--font-size-md);
+}
+.text-lg {
+    font-size: var(--font-size-lg);
+}
+.text-xl {
+    font-size: var(--font-size-xl);
+}
+.text-2xl {
+    font-size: var(--font-size-2xl);
+}
+.leading-normal {
+    line-height: var(--line-height);
+}
+.font-mono {
+    font-family: var(--font-mono);
+}
+.font-ui {
+    font-family: var(--font-ui);
+}
 
 /* Responsive table helpers */
 .table-wrap,
@@ -121,10 +172,18 @@ body {
         var(--tracker-col-3, var(--torrent-col-3, 120px))
         var(--tracker-col-4, var(--torrent-col-4, 120px))
         var(--tracker-col-5, var(--torrent-col-5, 120px))
-        var(--tracker-col-6, var(--torrent-col-6, 90px));
+        var(--tracker-col-6, var(--torrent-col-6, 90px))
+        var(--tracker-col-7, 120px);
     align-items: center;
     column-gap: 0; /* Keep columns flush like the table */
     min-width: 560px;
+}
+.table,
+.tracker-grid {
+    font-family: var(--font-ui);
+    font-feature-settings:
+        'kern' 1,
+        'liga' 1;
 }
 .tracker-grid-header {
     font-weight: 600;
@@ -133,7 +192,9 @@ body {
     background: var(--color-surface);
 }
 /* Trackers header column separators */
-.tracker-grid-header > div { position: relative; }
+.tracker-grid-header > div {
+    position: relative;
+}
 /* Stronger, full-height visual separator using a pseudo element */
 .tracker-grid-header > div + div::before {
     content: '';
@@ -156,16 +217,20 @@ body {
     border-bottom: 1px solid var(--color-border-weak);
 }
 .tracker-grid > div {
-    /* Match table cell padding so text origins align */
-    padding: var(--space-2) var(--space-3);
+    /* Roomier rows for readability */
+    padding: var(--space-3) var(--space-3);
 }
 /* Ensure Announce URL values start flush under the header text */
 .tracker-grid-header > div:nth-child(2) {
-    padding-left: var(--space-3) !important; /* align header label with Name header */
+    padding-left: var(
+        --space-3
+    ) !important; /* align header label with Name header */
 }
 .tracker-grid-row > div:nth-child(2) {
-    padding-left: 0 !important; /* allow URL values to start flush for more room */
-    grid-column: 1 / 3; /* span spacer + URL columns to start at extreme left */
+    padding-left: var(
+        --space-3
+    ) !important; /* mirror Torrent Name cell padding */
+    grid-column: auto; /* use the dedicated URL column for alignment */
 }
 .tracker-grid .num {
     text-align: left;

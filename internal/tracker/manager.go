@@ -308,11 +308,12 @@ func (m *Manager) runAnnounceLoop(ctx context.Context, tracker Tracker) error {
 		}
 
 		runtime.EventsEmit(ctx, "tracker:announce", map[string]any{
-			"tracker":    tracker.URL(),
-			"seeders":    resp.Seeders,
-			"leechers":   resp.Leechers,
-			"interval":   resp.Interval,
-			"peersCount": len(resp.Peers),
+			"tracker":     tracker.URL(),
+			"seeders":     resp.Seeders,
+			"leechers":    resp.Leechers,
+			"interval":    resp.Interval,
+			"minInterval": resp.MinInterval,
+			"peersCount":  len(resp.Peers),
 		})
 
 		m.emitPeers(tracker.URL(), resp.Peers)

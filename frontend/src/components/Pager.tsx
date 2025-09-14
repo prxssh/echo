@@ -1,4 +1,5 @@
 import React from 'react';
+import Button from './primitives/Button';
 
 type Props = {
     page: number;
@@ -21,26 +22,26 @@ export const Pager: React.FC<Props> = ({
 }) => {
     return (
         <div className="pager" role="navigation" aria-label="Pagination">
-            <button
-                className="btn-ghost"
+            <Button
+                variant="ghost"
                 disabled={page <= 1}
                 onClick={onPrev}
                 aria-label="Previous page"
             >
                 Prev
-            </button>
+            </Button>
             <span className="pager-info">
                 {totalItems === 0 ? '0' : `${rangeStart}`}–{rangeEnd} of{' '}
                 {totalItems}
             </span>
-            <button
-                className="btn-ghost"
+            <Button
+                variant="ghost"
                 disabled={page >= totalPages}
                 onClick={onNext}
                 aria-label="Next page"
             >
                 Next
-            </button>
+            </Button>
         </div>
     );
 };
